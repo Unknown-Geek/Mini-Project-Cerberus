@@ -1,0 +1,654 @@
+{
+  "name": "Main Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scan",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2160,
+        352
+      ],
+      "id": "43927e14-dc82-43e8-94aa-28d8137085ab",
+      "name": "Webhook",
+      "webhookId": "f77c6931-c83e-47e6-8da4-48d8acb8b849"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Here is the python code to audit:\n{{ $json.code }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "=You are the Lead Security Auditor for Cerberus.\n\n### CRITICAL EXECUTION RULES ###\n1. **SINGLE TOOL USE:** You must call the `scan_code_with_bandit` tool EXACTLY ONCE.\n2. **NO RETRIES:** Do not run the tool a second time.\n3. **IMMEDIATE EXIT:** Generate the Final JSON Report and STOP.\n\n### YOUR GOAL ###\nAudit the provided Python code using the tool and summarize findings into a strict JSON format.\n\n### INSTRUCTIONS ###\n1. Call `scan_code_with_bandit` with the user's code.\n2. The tool will return a JSON String. Parse it to access \"results\".\n\n3. **IF CLEAN:** If \"results\" is empty `[]`, return:\n   { \"has_issues\": false, \"vulnerabilities\": [], \"code\" : {{ $json.code }} }\n\n4. **IF VULNERABLE:** Map results to this structure.\n   **CRITICAL:** For `fix_recommendation`, you must provide the EXACT Python pattern to use.\n   - If Hardcoded Password -> \"Replace string with os.getenv('KEY'). Import os.\"\n   - If Path Traversal -> \"Use os.path.basename() or validate the path is inside a safe directory.\"\n   - If Weak Random -> \"Replace 'random' module with 'secrets' module.\"\n   - If Assert Used -> \"Replace assert with 'if not condition: raise ValueError(...)'.\"\n\n   RETURN FORMAT:\n   {\n     \"has_issues\": true,\n     \"vulnerabilities\": [\n       {\n         \"severity\": \"HIGH\", \n         \"issue_text\": \"Description from tool\", \n         \"line_number\": 10, \n         \"fix_recommendation\": \"Specific coding instruction (as defined above)\" \n       }\n     ],\n     \"code\" : {{ $json.code }}\n   }\n\n5. **OUTPUT:** Output ONLY the valid JSON object. No Markdown.",
+          "maxIterations": 5
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -864,
+        128
+      ],
+      "id": "e660e3b9-50c2-4692-ae15-e3c29fd693d3",
+      "name": "Auditor Agent",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Bandit Security Report:\n{{ $json.output }}\n\nOriginal Python Code:\n{{ $json.code }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "=You are the Senior Security Engineer (Patcher) for Cerberus.\n\nYOUR GOAL:\nApply security patches to the code based on the Auditor's findings.\n\n### SECURITY STANDARDS & PATTERNS (MUST FOLLOW) ###\n1. **Secrets & Credentials:** - NEVER leave hardcoded strings/keys. \n   - **Action:** Import `os` and replace the string with `os.getenv('VARIABLE_NAME')`.\n   \n2. **Path Traversal:** - **Action:** Import `os`. Use `os.path.basename(filename)` to strip directory paths OR use `os.path.abspath` to verify the path is within a safe directory.\n\n3. **Randomness:** - **Action:** Import `secrets`. Replace `random.random()` or `random.choice()` with `secrets.choice()` or `secrets.token_hex()` for any security-sensitive data.\n\n4. **Assert Statements:** - **Action:** Replace `assert condition` with explicit checks: `if not condition: raise ValueError(\"Error message\")`.\n\n5. **Command Execution:**\n   - **Action:** Import `subprocess`. Replace `os.system` with `subprocess.run(..., shell=False)`. Use `shlex.quote()` if shell is absolutely necessary.\n\n### RULES ###\n1. Fix EVERY issue listed in the \"vulnerabilities\" list.\n2. **MANAGE IMPORTS:** If you add `os.getenv`, you MUST add `import os` at the top. If you use `secrets`, `import secrets`. Check imports carefully.\n3. **PRESERVE LOGIC:** Do not delete features. Sanitize inputs, don't remove them.\n4. Return ONLY the raw, full, corrected Python code. No markdown."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ff643c84-2c3f-4ce2-aa94-6df5235413aa",
+      "name": "Patcher Agent",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.code }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "You are a Python Syntax Specialist for the Cerberus Security System.\n\nYOUR GOAL:\nReceive raw Python code and ensure it is syntactically valid and executable.\n\nRULES:\n1. Fix ONLY syntax errors (indentation, missing colons, unclosed brackets, typos).\n2. Do NOT fix security vulnerabilities yet (that is the Auditor's job).\n3. Do NOT change the code's logic or functionality.\n4. Output ONLY the raw Python code block. Do not output markdown backticks (```) or conversational filler like \"Here is the code\"."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -1936,
+        352
+      ],
+      "id": "47ee2ef1-a678-4014-a924-edf6d4cbcd5a",
+      "name": "Syntax Fixer Agent",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1584,
+        352
+      ],
+      "id": "5b4708ac-434a-4229-938e-735918bc764b",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "faeda04e-714f-4e65-999d-9f0a606d0a3b",
+              "name": "loop_count",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "88b76ede-875b-4cfc-9f0a-6b32de3b1daa",
+              "name": "code",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1360,
+        288
+      ],
+      "id": "0dc9e37f-a5fb-413f-9d3f-d650f7d1c48a",
+      "name": "Init Loop Counter"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Copy the incoming item's data\nconst outputData = JSON.parse(JSON.stringify($input.first().json));\n\n// Get loop count from current input, default to 0\nlet currentCount = outputData.loop_count || 0;\n\n// Increment the counter\noutputData.loop_count = currentCount + 1;\n\n// Return in n8n format\nreturn [{\"json\": outputData}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        656
+      ],
+      "id": "c7cb9c7e-fa15-4b2e-8fa2-57fbaa25aca0",
+      "name": "Increment Counter"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "58156bcb-1894-40c7-937b-39fe296ba143",
+              "leftValue": "={{ $json.loop_count }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1136,
+        288
+      ],
+      "id": "118bbd41-daed-4ed9-878b-f2300138f241",
+      "name": "Max Retries Reached?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "613df6d1-dcc0-4c96-a88c-9671cce24738",
+              "leftValue": "={{ $json.has_issues }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -224,
+        256
+      ],
+      "id": "47ae0272-23f0-438d-81c1-7a0b2d43a0a5",
+      "name": "Vulnerabilities Found?"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Analyzes python code for security vulnerabilities using the Bandit SAST tool. Returns a JSON report.\nThe tool input must be in the format:\n{\n  \"code\": \"{{ fromAI('code') }}\"\n}",
+        "method": "POST",
+        "url": "http://bandit-scanner:5000/scan",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "code",
+              "value": "={{ $fromAI(\"code\") || ''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        -656,
+        352
+      ],
+      "id": "00d0f64c-1362-4610-a22a-c1119f191dd2",
+      "name": "scan_code_with_bandit"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1936,
+        576
+      ],
+      "id": "1628c479-6375-4a35-9043-85062fa3328b",
+      "name": "Syntax Fixer Main",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "DoPP6uNz8ZGXDeHX",
+          "name": "API KEY 1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3-flash-preview",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -912,
+        352
+      ],
+      "id": "0407cc99-b09d-4051-8d19-82fed422900f",
+      "name": "Auditor Main",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "DoPP6uNz8ZGXDeHX",
+          "name": "API KEY 1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-oss-120b",
+          "mode": "list",
+          "cachedResultName": "gpt-oss-120b"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -784,
+        352
+      ],
+      "id": "3b554c68-0e8e-42d5-8258-812eba1be936",
+      "name": "Auditor Fallback",
+      "credentials": {
+        "openAiApi": {
+          "id": "rE0ktKj6dyd5ekSS",
+          "name": "Cerebras API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-oss-120b",
+          "mode": "list",
+          "cachedResultName": "gpt-oss-120b"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        144,
+        224
+      ],
+      "id": "857df4e4-699d-4eef-811b-a379171b69f4",
+      "name": "Patcher Fallback",
+      "credentials": {
+        "openAiApi": {
+          "id": "rE0ktKj6dyd5ekSS",
+          "name": "Cerebras API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-flash-lite-latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        16,
+        224
+      ],
+      "id": "1286ade1-bf01-4de0-9bf0-98bb896f2a22",
+      "name": "Patcher Main",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "DoPP6uNz8ZGXDeHX",
+          "name": "API KEY 1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop through items in case multiple run at once\nfor (const item of items) {\n  try {\n    const rawOutput = item.json.output;\n    let parsedData;\n\n    // CHECK 1: Is it already an Object? (n8n auto-parsed it)\n    if (typeof rawOutput === 'object' && rawOutput !== null) {\n      parsedData = rawOutput;\n    } \n    // CHECK 2: Is it a String? (Needs cleaning & parsing)\n    else if (typeof rawOutput === 'string') {\n      // Remove markdown blocks like ```json ... ```\n      const cleanJson = rawOutput.replace(/^```json\\s*|\\s*```$/g, '');\n      parsedData = JSON.parse(cleanJson);\n    }\n\n    // Merge the parsed data back into the item\n    // You will now have 'has_issues', 'vulnerabilities', etc. as top-level keys\n    Object.assign(item.json, parsedData);\n\n  } catch (error) {\n    // Fallback if parsing fails\n    item.json.error = \"Failed to parse JSON\";\n    item.json.raw_response = item.json.output;\n  }\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        256
+      ],
+      "id": "e2a0a0d0-ea94-429b-b65a-94b55c0f0033",
+      "name": "JSON Output Parser"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"corrected_code\": {{ JSON.stringify($json.code|| \"\") }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        64,
+        400
+      ],
+      "id": "9b8711bd-b6c3-40dc-bd67-988c1c8381f7",
+      "name": "Send Corrected Code"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"error\": \"Failed to fix after 3 attempts. Returning last best version\",\n  \"status\": \"Not Secure\",\n  \"last best version\" : {{ JSON.stringify($json.code) }}\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -800,
+        560
+      ],
+      "id": "d8b18050-52da-4ed0-b977-6ef2e9a3dbf7",
+      "name": "Send Error"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"Agents Failed to fix the code\",\n  \"status\": \"Not Secure\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        352,
+        -96
+      ],
+      "id": "2b638033-5c3f-4ed9-9679-abbfa4a77921",
+      "name": "Send Error - Agents"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "llama3.1-8b",
+          "mode": "id"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1808,
+        576
+      ],
+      "id": "304bd13b-af66-4fd4-91bb-c8e328a6cfbc",
+      "name": "Syntax Fixer Fallback",
+      "credentials": {
+        "openAiApi": {
+          "id": "rE0ktKj6dyd5ekSS",
+          "name": "Cerebras API"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Syntax Fixer Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auditor Agent": {
+      "main": [
+        [
+          {
+            "node": "JSON Output Parser",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error - Agents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patcher Agent": {
+      "main": [
+        [
+          {
+            "node": "Increment Counter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error - Agents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Syntax Fixer Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Init Loop Counter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Loop Counter": {
+      "main": [
+        [
+          {
+            "node": "Max Retries Reached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Counter": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Max Retries Reached?": {
+      "main": [
+        [
+          {
+            "node": "Send Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auditor Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vulnerabilities Found?": {
+      "main": [
+        [
+          {
+            "node": "Patcher Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Corrected Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "scan_code_with_bandit": {
+      "ai_tool": [
+        [
+          {
+            "node": "Auditor Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Syntax Fixer Main": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Syntax Fixer Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auditor Main": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Auditor Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auditor Fallback": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Auditor Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Patcher Fallback": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Patcher Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Patcher Main": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Patcher Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON Output Parser": {
+      "main": [
+        [
+          {
+            "node": "Vulnerabilities Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Syntax Fixer Fallback": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Syntax Fixer Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "8a218ea3-550a-4071-bea5-d49c86d9ed94",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "19921415bac6b77b91e822c3e97165800ced3a4d6f63d204500fd50a2d359050"
+  },
+  "id": "jIujGNKU3uOwi2PrD2OZh",
+  "tags": []
+}
