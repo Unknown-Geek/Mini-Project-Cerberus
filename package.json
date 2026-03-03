@@ -85,8 +85,8 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test",
-    "server:start": "node server.js",
-    "server:dev": "nodemon server.js"
+    "server:start": "node server/server.js",
+    "server:dev": "nodemon server/server.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
