@@ -18,9 +18,11 @@ const path = require('path');
 const { execSync, spawn } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
+const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+const EXT_ID = `${PKG.publisher}.${PKG.name}`;
 const WATCH_DIRS = [path.join(ROOT, 'src')];
 const WATCH_FILES = [path.join(ROOT, 'package.json')];
-const VSIX = 'cerberus-0.0.1.vsix';
+const VSIX = `${PKG.name}-${PKG.version}.vsix`;
 const DEBOUNCE_MS = 800;
 
 let debounceTimer = null;
@@ -61,6 +63,9 @@ async function buildAndReinstall(changedFile) {
   const ok2 = run(`npx @vscode/vsce package --allow-missing-repository --no-update-package-json`, 'vsce package');
   if (!ok2) { building = false; return; }
 
+  // Uninstall first so VS Code doesn't block reinstall of a loaded extension
+  run(`code --uninstall-extension ${EXT_ID}`, 'Uninstall old .vsix');
+
   const ok3 = run(`code --install-extension ${VSIX}`, 'Install .vsix');
   if (ok3) {
     log('✔ Done — reload the Extension Development Host window (Ctrl+R / Cmd+R) to pick up changes.');
@@ -97,7 +102,8 @@ function watchFile(filePath) {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 log('Starting extension watcher…');
-log(`VSIX target: ${VSIX}`);
+log(`Extension ID: ${EXT_ID}`);
+log(`VSIX target:  ${VSIX}`);
 console.log('');
 
 WATCH_DIRS.forEach(watchDir);
