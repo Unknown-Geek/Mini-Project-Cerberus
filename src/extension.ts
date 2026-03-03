@@ -194,7 +194,58 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage('🔴 Cerberus: Real-time scanning stopped.');
 	});
 
-	context.subscriptions.push(scanDisposable, fixDisposable, fixFileDisposable, viewDisposable, startDisposable, stopDisposable);
+	// ============================
+	// APPLY STORED FIX (command palette)
+	// ============================
+	const applyStoredFixDisposable = vscode.commands.registerCommand('cerberus.applyStoredFix', async () => {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage('Open the file you want to fix first.');
+			return;
+		}
+
+		const filePath = activeEditor.document.uri.fsPath;
+		const fileName = path.basename(filePath);
+
+		setStatus('scanning', fileName);
+
+		try {
+			const response = await axios.get(`${BACKEND_URL}/api/stored-fix`, {
+				params: { path: filePath },
+				timeout: 10000
+			});
+
+			const { correctedCode, storedAt } = response.data;
+			const age = storedAt
+				? `(scanned ${new Date(storedAt).toLocaleTimeString()})`
+				: '';
+
+			const choice = await vscode.window.showInformationMessage(
+				`Cerberus: Apply stored fix for ${fileName} ${age}?`,
+				'Apply', 'Cancel'
+			);
+			if (choice !== 'Apply') {
+				setStatus('idle');
+				return;
+			}
+
+			await applyFix(filePath, correctedCode);
+			setStatus('idle');
+		} catch (error: any) {
+			setStatus('idle');
+			if (error.response?.status === 404) {
+				vscode.window.showWarningMessage(
+					`No stored fix for ${fileName}. Run "Cerberus: Scan for Vulnerabilities" first.`
+				);
+			} else if (error.code === 'ECONNREFUSED') {
+				vscode.window.showErrorMessage('Cerberus server is not running. Start it with: npm run server:start');
+			} else {
+				vscode.window.showErrorMessage(`Failed to retrieve stored fix: ${error.message}`);
+			}
+		}
+	});
+
+	context.subscriptions.push(scanDisposable, fixDisposable, fixFileDisposable, viewDisposable, startDisposable, stopDisposable, applyStoredFixDisposable);
 }
 
 // ============================

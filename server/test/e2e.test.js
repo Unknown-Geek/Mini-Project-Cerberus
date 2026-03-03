@@ -162,6 +162,21 @@ async function main() {
         assert.strictEqual(res.status, 400);
     });
 
+    // ── GET /api/stored-fix ───────────────────
+    console.log('\n── GET /api/stored-fix ──');
+
+    await test('400 when "path" param is missing', async () => {
+        const res = await request('GET', '/api/stored-fix');
+        assert.strictEqual(res.status, 400);
+        assert.ok(res.body.error);
+    });
+
+    await test('404 when no result has been stored for the path', async () => {
+        const res = await request('GET', '/api/stored-fix?path=/tmp/cerberus_no_such_file_xyz.py');
+        assert.strictEqual(res.status, 404);
+        assert.match(res.body.error, /stored fix/i);
+    });
+
     // ──────────────────────────────────────────
     // Summary
     // ──────────────────────────────────────────

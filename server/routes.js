@@ -5,7 +5,10 @@
 
 const express = require('express');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
 const { glob } = require('glob');
 const rateLimit = require('express-rate-limit');
 const {
@@ -395,6 +398,50 @@ async function scanFileCode(code, filePath) {
   return correctedLines.join('\n');
 }
 
+// ── Temp result store ────────────────────────────────────────────────────────
+const CERBERUS_TMP_DIR = path.join(os.tmpdir(), 'cerberus-results');
+
+// Ensure temp dir exists (sync so it's ready before any request)
+try { fsSync.mkdirSync(CERBERUS_TMP_DIR, { recursive: true }); } catch {}
+
+/**
+ * Persist corrected code to a temp file so Apply Fix can retrieve it later.
+ * Key: SHA-1 of the absolute file path.
+ */
+async function storeResult(filePath, correctedCode) {
+  const key = crypto.createHash('sha1').update(filePath).digest('hex');
+  const tmpFile = path.join(CERBERUS_TMP_DIR, `${key}.json`);
+  await fs.writeFile(tmpFile, JSON.stringify({
+    filePath,
+    correctedCode,
+    storedAt: new Date().toISOString()
+  }), 'utf8');
+  console.log(`[STORE] Saved result for ${path.basename(filePath)} → ${tmpFile}`);
+}
+
+/**
+ * GET /api/stored-fix?path=<absolute-file-path>
+ * Returns the most recently stored corrected code for a given file.
+ */
+router.get('/api/stored-fix', async (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath || typeof filePath !== 'string') {
+    return res.status(400).json({ error: 'Missing query param: path' });
+  }
+  const key = crypto.createHash('sha1').update(filePath).digest('hex');
+  const tmpFile = path.join(CERBERUS_TMP_DIR, `${key}.json`);
+  try {
+    const raw = await fs.readFile(tmpFile, 'utf8');
+    const { correctedCode, storedAt } = JSON.parse(raw);
+    return res.json({ filePath, correctedCode, storedAt });
+  } catch {
+    return res.status(404).json({
+      error: 'No stored fix',
+      message: `No scan result stored for ${path.basename(filePath)}. Run a scan first.`
+    });
+  }
+});
+
 /**
  * POST /api/scan-file
  * Scan a single file for vulnerabilities (with automatic chunking for large files)
@@ -431,6 +478,8 @@ router.post('/api/scan-file', async (req, res) => {
       result
     });
 
+    // Persist to temp file so command-palette Apply Fix can use it
+    await storeResult(filePath, result);
     console.log(`✅ File analyzed successfully: ${filePath}`);
   } catch (error) {
     console.error(`❌ Error analyzing file ${filePath}:`, error.message);

@@ -50,6 +50,12 @@
         "title": "Stop Real-Time Scanning",
         "category": "Cerberus",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "cerberus.applyStoredFix",
+        "title": "Apply Stored Fix",
+        "category": "Cerberus",
+        "icon": "$(save)"
       }
     ],
     "menus": {
