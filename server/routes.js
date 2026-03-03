@@ -285,9 +285,67 @@ router.post('/api/scan', scanLimiter, async (req, res) => {
   });
 });
 
+// ── Chunking helper ──────────────────────────────────────────────────────────
+// Splits code into line-based chunks that target MAX_CHUNK_CHARS characters
+// each, so every n8n call stays well under a reverse-proxy 60-second timeout.
+const MAX_CHUNK_CHARS = parseInt(process.env.MAX_CHUNK_CHARS || '1500', 10);
+
+/**
+ * Split code into chunks of ~targetChars characters, aligned to line boundaries.
+ * @param {string} code
+ * @param {number} targetChars
+ * @returns {{ chunk: string, startLine: number, endLine: number }[]}
+ */
+function chunkCode(code, targetChars) {
+  const lines = code.split('\n');
+  const avgLen = Math.max(1, code.length / lines.length);
+  const linesPerChunk = Math.max(20, Math.round(targetChars / avgLen));
+
+  const chunks = [];
+  for (let i = 0; i < lines.length; i += linesPerChunk) {
+    const slice = lines.slice(i, i + linesPerChunk);
+    chunks.push({ chunk: slice.join('\n'), startLine: i, endLine: i + slice.length - 1 });
+  }
+  return chunks;
+}
+
+/**
+ * Scan a file, using chunked n8n calls when the file exceeds MAX_CHUNK_CHARS.
+ * Reassembles corrected chunks into a single corrected file.
+ */
+async function scanFileCode(code, filePath) {
+  const timeoutSeconds = parseFloat(process.env.N8N_TIMEOUT_SECONDS || '120');
+  const webhookUrl = process.env.N8N_WEBHOOK_URL;
+
+  if (code.length <= MAX_CHUNK_CHARS) {
+    // Small file — single call
+    return await patchCodeViaN8n({ code, webhookUrl, timeoutSeconds });
+  }
+
+  // Large file — split into chunks, scan each, reassemble
+  const chunks = chunkCode(code, MAX_CHUNK_CHARS);
+  console.log(`[CHUNK] ${path.basename(filePath)}: ${code.length} chars → ${chunks.length} chunks (limit ${MAX_CHUNK_CHARS})`);
+
+  const correctedParts = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const { chunk, startLine, endLine } = chunks[i];
+    console.log(`[CHUNK] Processing chunk ${i + 1}/${chunks.length} (lines ${startLine}-${endLine}, ${chunk.length} chars)`);
+    try {
+      const corrected = await patchCodeViaN8n({ code: chunk, webhookUrl, timeoutSeconds });
+      correctedParts.push(corrected);
+    } catch (err) {
+      // Keep original chunk on failure so the rest of the file is still returned
+      console.warn(`[CHUNK] Chunk ${i + 1} failed (${err.message}), keeping original`);
+      correctedParts.push(chunk);
+    }
+  }
+
+  return correctedParts.join('\n');
+}
+
 /**
  * POST /api/scan-file
- * Scan a single file for vulnerabilities
+ * Scan a single file for vulnerabilities (with automatic chunking for large files)
  */
 router.post('/api/scan-file', async (req, res) => {
   // Validate request is JSON
@@ -313,11 +371,7 @@ router.post('/api/scan-file', async (req, res) => {
   const vulnerabilities = [];
 
   try {
-    const result = await patchCodeViaN8n({
-      code,
-      webhookUrl: process.env.N8N_WEBHOOK_URL,
-      timeoutSeconds: parseFloat(process.env.N8N_TIMEOUT_SECONDS || '20')
-    });
+    const result = await scanFileCode(code, filePath);
 
     vulnerabilities.push({
       file: filePath,
@@ -330,24 +384,11 @@ router.post('/api/scan-file', async (req, res) => {
     console.error(`❌ Error analyzing file ${filePath}:`, error.message);
 
     if (error instanceof N8NWebhookTimeoutError) {
-      vulnerabilities.push({
-        file: filePath,
-        status: 'error',
-        error: 'Analysis timed out'
-      });
-    } else if (error instanceof N8NWebhookUpstreamError ||
-      error instanceof N8NWebhookResponseError) {
-      vulnerabilities.push({
-        file: filePath,
-        status: 'error',
-        error: error.message
-      });
+      vulnerabilities.push({ file: filePath, status: 'error', error: 'Analysis timed out' });
+    } else if (error instanceof N8NWebhookUpstreamError || error instanceof N8NWebhookResponseError) {
+      vulnerabilities.push({ file: filePath, status: 'error', error: error.message });
     } else {
-      vulnerabilities.push({
-        file: filePath,
-        status: 'error',
-        error: 'Unexpected error during analysis'
-      });
+      vulnerabilities.push({ file: filePath, status: 'error', error: 'Unexpected error during analysis' });
     }
   }
 
