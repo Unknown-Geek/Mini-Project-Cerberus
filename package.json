@@ -99,7 +99,8 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "server:start": "node server/server.js",
-    "server:dev": "nodemon server/server.js"
+    "server:dev": "nodemon server/server.js",
+    "dev:ext": "node scripts/watch-ext.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

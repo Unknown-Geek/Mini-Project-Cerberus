@@ -23,6 +23,9 @@ Main Workflow.json
 eslint.config.mjs
 tsconfig.json
 
+# Dev scripts
+scripts/
+
 # Dev-only node_modules
 node_modules/.cache
 node_modules/**/*.md
