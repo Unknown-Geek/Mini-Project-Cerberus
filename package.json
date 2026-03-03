@@ -64,7 +64,8 @@
       "cerberus-explorer": [
         {
           "id": "cerberus.vulnerabilityView",
-          "name": "Vulnerabilities"
+          "name": "Vulnerabilities",
+          "icon": "$(shield)"
         }
       ]
     },
