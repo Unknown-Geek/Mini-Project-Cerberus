@@ -304,6 +304,21 @@ const BOGUS_PATTERNS = [
 ];
 
 /**
+ * Strip markdown code fences that the AI sometimes wraps responses in.
+ * e.g.  ```python\n...\n```  →  just the inner code
+ */
+function stripMarkdownFences(code) {
+  if (typeof code !== 'string') return code;
+  // Match optional language tag: ```python\n...\n``` or ```\n...\n```
+  const fenceMatch = code.match(/^\s*```[\w]*\n([\s\S]*?)\n```\s*$/);
+  if (fenceMatch) return fenceMatch[1];
+  // Also handle no trailing newline before closing fence
+  const fenceMatch2 = code.match(/^\s*```[\w]*\n([\s\S]*?)```\s*$/);
+  if (fenceMatch2) return fenceMatch2[1];
+  return code;
+}
+
+/**
  * Return true if the n8n response should be discarded in favour of the original chunk.
  */
 function isBogusResponse(original, corrected) {
@@ -345,7 +360,8 @@ async function scanFileCode(code, filePath) {
 
   if (code.length <= MAX_CHUNK_CHARS) {
     // Small file — single call
-    const result = await patchCodeViaN8n({ code, webhookUrl, timeoutSeconds });
+    let result = await patchCodeViaN8n({ code, webhookUrl, timeoutSeconds });
+    result = stripMarkdownFences(result);
     if (isBogusResponse(code, result)) {
       console.warn(`[CHUNK] Single-call response looks bogus, keeping original`);
       return code;
@@ -360,24 +376,30 @@ async function scanFileCode(code, filePath) {
 
   const correctedLines = [...allLines]; // start with original; patch in place
 
+  // lineOffset tracks how many lines have been added/removed by previous chunks
+  // so we can splice at the correct adjusted position in correctedLines.
+  let lineOffset = 0;
+
   for (let i = 0; i < chunks.length; i++) {
     const { lines: chunkLines, startLine } = chunks[i];
+    const adjustedStart = startLine + lineOffset;
     const endLine = startLine + chunkLines.length - 1;
 
     // Prepend overlap context from the already-corrected lines above
-    const contextLines = startLine > 0
-      ? correctedLines.slice(Math.max(0, startLine - OVERLAP_LINES), startLine)
+    const contextLines = adjustedStart > 0
+      ? correctedLines.slice(Math.max(0, adjustedStart - OVERLAP_LINES), adjustedStart)
       : [];
     const payload = [...contextLines, ...chunkLines].join('\n');
 
-    console.log(`[CHUNK] Processing chunk ${i + 1}/${chunks.length} (lines ${startLine}-${endLine}, ${payload.length} chars, ${contextLines.length} context lines)`);
+    console.log(`[CHUNK] Processing chunk ${i + 1}/${chunks.length} (lines ${startLine}-${endLine}, adjusted ${adjustedStart}, ${payload.length} chars, ${contextLines.length} context lines)`);
 
     try {
-      const corrected = await patchCodeViaN8n({ code: payload, webhookUrl, timeoutSeconds });
+      let corrected = await patchCodeViaN8n({ code: payload, webhookUrl, timeoutSeconds });
+      corrected = stripMarkdownFences(corrected);
 
       if (isBogusResponse(payload, corrected)) {
         console.warn(`[CHUNK] Chunk ${i + 1} response looks bogus, keeping original`);
-        // correctedLines already has the original — nothing to do
+        // correctedLines already has the original — nothing to do, offset unchanged
         continue;
       }
 
@@ -387,8 +409,11 @@ async function scanFileCode(code, filePath) {
         ? correctedAllLines.slice(contextLines.length)
         : correctedAllLines;
 
-      // Write stripped result back into correctedLines at the right position
-      correctedLines.splice(startLine, chunkLines.length, ...stripped);
+      // Write stripped result back into correctedLines at the adjusted position
+      correctedLines.splice(adjustedStart, chunkLines.length, ...stripped);
+
+      // Update offset: positive if AI added lines, negative if it removed them
+      lineOffset += stripped.length - chunkLines.length;
 
     } catch (err) {
       console.warn(`[CHUNK] Chunk ${i + 1} failed (${err.message}), keeping original`);
