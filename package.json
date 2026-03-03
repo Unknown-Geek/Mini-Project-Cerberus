@@ -37,6 +37,18 @@
         "command": "cerberus.viewResults",
         "title": "View Results",
         "category": "Cerberus"
+      },
+      {
+        "command": "cerberus.startRealTime",
+        "title": "Start Real-Time Scanning",
+        "category": "Cerberus",
+        "icon": "$(play)"
+      },
+      {
+        "command": "cerberus.stopRealTime",
+        "title": "Stop Real-Time Scanning",
+        "category": "Cerberus",
+        "icon": "$(debug-stop)"
       }
     ],
     "menus": {

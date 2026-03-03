@@ -80,7 +80,7 @@ async function main() {
     // Start server silently
     const origLog = console.log;
     process.env.NODE_ENV = 'test';
-    const app = require('./server/server.js');
+    const app = require('../server.js');
     console.log = origLog;
 
     // Give server a moment to bind

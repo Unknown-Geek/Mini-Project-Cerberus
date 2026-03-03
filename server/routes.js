@@ -39,18 +39,18 @@ function validateScanPath(inputPath) {
   if (inputPath.includes('\0')) {
     return { isValid: false, error: 'Path contains null bytes' };
   }
-  
+
   // Resolve the absolute path
   const resolvedPath = path.resolve(inputPath);
-  
+
   // Define allowed base directory (default to current working directory)
   const allowedBase = path.resolve(process.env.SCAN_BASE_PATH || process.cwd());
-  
+
   // Ensure the resolved path is within the allowed base directory
   if (!resolvedPath.startsWith(allowedBase)) {
     return { isValid: false, error: 'Path is outside allowed directory' };
   }
-  
+
   return { isValid: true, resolvedPath };
 }
 
@@ -99,11 +99,78 @@ router.post('/api/patch-code', async (req, res) => {
     console.error('n8n webhook call failed:', error);
 
     if (error instanceof N8NWebhookTimeoutError ||
-        error instanceof N8NWebhookUpstreamError ||
-        error instanceof N8NWebhookResponseError) {
+      error instanceof N8NWebhookUpstreamError ||
+      error instanceof N8NWebhookResponseError) {
       return res.status(502).json({
         error: 'Bad Gateway',
         message: 'Unable to retrieve corrected code from n8n webhook.'
+      });
+    }
+
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'An unexpected error occurred.'
+    });
+  }
+});
+
+// Rate limiting for real-time snippet patching (30 requests per minute per IP)
+const snippetLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: {
+    error: 'Too many requests',
+    message: 'Too many snippet patch requests, please slow down'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+/**
+ * POST /api/patch-snippet
+ * Real-time snippet patching — receives a code snippet, sends to n8n, returns patched version
+ */
+router.post('/api/patch-snippet', snippetLimiter, async (req, res) => {
+  if (!req.is('application/json')) {
+    return res.status(400).json({
+      error: 'Invalid payload',
+      message: "Request must be JSON"
+    });
+  }
+
+  const { snippet, filePath, startLine, endLine, fullFileContext } = req.body;
+
+  if (typeof snippet !== 'string' || snippet.trim().length === 0) {
+    return res.status(400).json({
+      error: 'Invalid payload',
+      message: "Field 'snippet' is required and must be a non-empty string."
+    });
+  }
+
+  console.log(`[SNIPPET] Patching ${path.basename(filePath || 'unknown')} lines ${startLine}-${endLine} (${snippet.length} chars)`);
+
+  try {
+    const patchedSnippet = await patchCodeViaN8n({
+      code: snippet,
+      webhookUrl: process.env.N8N_WEBHOOK_URL,
+      timeoutSeconds: parseFloat(process.env.N8N_TIMEOUT_SECONDS || '120')
+    });
+
+    const hasChanges = patchedSnippet !== snippet;
+
+    return res.json({
+      patched_snippet: patchedSnippet,
+      has_changes: hasChanges
+    });
+  } catch (error) {
+    console.error('[SNIPPET] n8n call failed:', error.message);
+
+    if (error instanceof N8NWebhookTimeoutError ||
+      error instanceof N8NWebhookUpstreamError ||
+      error instanceof N8NWebhookResponseError) {
+      return res.status(502).json({
+        error: 'Bad Gateway',
+        message: 'Unable to patch snippet via n8n.'
       });
     }
 
@@ -190,8 +257,8 @@ router.post('/api/scan', scanLimiter, async (req, res) => {
         });
       } catch (error) {
         if (error instanceof N8NWebhookTimeoutError ||
-            error instanceof N8NWebhookUpstreamError ||
-            error instanceof N8NWebhookResponseError) {
+          error instanceof N8NWebhookUpstreamError ||
+          error instanceof N8NWebhookResponseError) {
           vulnerabilities.push({
             file: filePath,
             status: 'error',
@@ -269,7 +336,7 @@ router.post('/api/scan-file', async (req, res) => {
         error: 'Analysis timed out'
       });
     } else if (error instanceof N8NWebhookUpstreamError ||
-               error instanceof N8NWebhookResponseError) {
+      error instanceof N8NWebhookResponseError) {
       vulnerabilities.push({
         file: filePath,
         status: 'error',

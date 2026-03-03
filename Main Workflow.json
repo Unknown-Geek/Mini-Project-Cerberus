@@ -202,7 +202,7 @@
       "parameters": {
         "toolDescription": "Analyzes python code for security vulnerabilities using the Bandit SAST tool. Returns a JSON report.\nThe tool input must be in the format:\n{\n  \"code\": \"{{ fromAI('code') }}\"\n}",
         "method": "POST",
-        "url": "http://bandit-scanner:5000/scan",
+        "url": "https://n8n.shravanpandala.me/bandit/scan",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
