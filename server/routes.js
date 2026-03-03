@@ -289,12 +289,34 @@ router.post('/api/scan', scanLimiter, async (req, res) => {
 // Splits code into line-based chunks that target MAX_CHUNK_CHARS characters
 // each, so every n8n call stays well under a reverse-proxy 60-second timeout.
 const MAX_CHUNK_CHARS = parseInt(process.env.MAX_CHUNK_CHARS || '1500', 10);
+// Lines of previous chunk to prepend as context so the AI understands continuations
+const OVERLAP_LINES = parseInt(process.env.OVERLAP_LINES || '5', 10);
+
+// Responses the n8n AI emits when it can't make sense of a snippet
+const BOGUS_PATTERNS = [
+  /^$/,                          // empty string
+  /INSERT_ORIGINAL_CODE_HERE/i,  // literal placeholder
+  /^null$/i,                     // null string
+  /^undefined$/i,
+];
+
+/**
+ * Return true if the n8n response should be discarded in favour of the original chunk.
+ */
+function isBogusResponse(original, corrected) {
+  if (typeof corrected !== 'string') return true;
+  const trimmed = corrected.trim();
+  if (BOGUS_PATTERNS.some(re => re.test(trimmed))) return true;
+  // If the response is less than 10% the length of a non-trivial chunk, it's likely garbage
+  if (original.length > 100 && trimmed.length < original.length * 0.10) return true;
+  return false;
+}
 
 /**
  * Split code into chunks of ~targetChars characters, aligned to line boundaries.
  * @param {string} code
  * @param {number} targetChars
- * @returns {{ chunk: string, startLine: number, endLine: number }[]}
+ * @returns {{ lines: string[], startLine: number }[]}
  */
 function chunkCode(code, targetChars) {
   const lines = code.split('\n');
@@ -303,15 +325,16 @@ function chunkCode(code, targetChars) {
 
   const chunks = [];
   for (let i = 0; i < lines.length; i += linesPerChunk) {
-    const slice = lines.slice(i, i + linesPerChunk);
-    chunks.push({ chunk: slice.join('\n'), startLine: i, endLine: i + slice.length - 1 });
+    chunks.push({ lines: lines.slice(i, i + linesPerChunk), startLine: i });
   }
   return chunks;
 }
 
 /**
  * Scan a file, using chunked n8n calls when the file exceeds MAX_CHUNK_CHARS.
- * Reassembles corrected chunks into a single corrected file.
+ * Each chunk is sent with OVERLAP_LINES of context from the previous chunk so
+ * the AI understands mid-file continuations. Bogus responses are replaced with
+ * the original chunk so no code is silently dropped.
  */
 async function scanFileCode(code, filePath) {
   const timeoutSeconds = parseFloat(process.env.N8N_TIMEOUT_SECONDS || '120');
@@ -319,28 +342,57 @@ async function scanFileCode(code, filePath) {
 
   if (code.length <= MAX_CHUNK_CHARS) {
     // Small file — single call
-    return await patchCodeViaN8n({ code, webhookUrl, timeoutSeconds });
+    const result = await patchCodeViaN8n({ code, webhookUrl, timeoutSeconds });
+    if (isBogusResponse(code, result)) {
+      console.warn(`[CHUNK] Single-call response looks bogus, keeping original`);
+      return code;
+    }
+    return result;
   }
 
   // Large file — split into chunks, scan each, reassemble
+  const allLines = code.split('\n');
   const chunks = chunkCode(code, MAX_CHUNK_CHARS);
   console.log(`[CHUNK] ${path.basename(filePath)}: ${code.length} chars → ${chunks.length} chunks (limit ${MAX_CHUNK_CHARS})`);
 
-  const correctedParts = [];
+  const correctedLines = [...allLines]; // start with original; patch in place
+
   for (let i = 0; i < chunks.length; i++) {
-    const { chunk, startLine, endLine } = chunks[i];
-    console.log(`[CHUNK] Processing chunk ${i + 1}/${chunks.length} (lines ${startLine}-${endLine}, ${chunk.length} chars)`);
+    const { lines: chunkLines, startLine } = chunks[i];
+    const endLine = startLine + chunkLines.length - 1;
+
+    // Prepend overlap context from the already-corrected lines above
+    const contextLines = startLine > 0
+      ? correctedLines.slice(Math.max(0, startLine - OVERLAP_LINES), startLine)
+      : [];
+    const payload = [...contextLines, ...chunkLines].join('\n');
+
+    console.log(`[CHUNK] Processing chunk ${i + 1}/${chunks.length} (lines ${startLine}-${endLine}, ${payload.length} chars, ${contextLines.length} context lines)`);
+
     try {
-      const corrected = await patchCodeViaN8n({ code: chunk, webhookUrl, timeoutSeconds });
-      correctedParts.push(corrected);
+      const corrected = await patchCodeViaN8n({ code: payload, webhookUrl, timeoutSeconds });
+
+      if (isBogusResponse(payload, corrected)) {
+        console.warn(`[CHUNK] Chunk ${i + 1} response looks bogus, keeping original`);
+        // correctedLines already has the original — nothing to do
+        continue;
+      }
+
+      // Strip the context lines back off the top of the response
+      const correctedAllLines = corrected.split('\n');
+      const stripped = contextLines.length > 0
+        ? correctedAllLines.slice(contextLines.length)
+        : correctedAllLines;
+
+      // Write stripped result back into correctedLines at the right position
+      correctedLines.splice(startLine, chunkLines.length, ...stripped);
+
     } catch (err) {
-      // Keep original chunk on failure so the rest of the file is still returned
       console.warn(`[CHUNK] Chunk ${i + 1} failed (${err.message}), keeping original`);
-      correctedParts.push(chunk);
     }
   }
 
-  return correctedParts.join('\n');
+  return correctedLines.join('\n');
 }
 
 /**
