@@ -40,13 +40,13 @@ function log(msg) {
   console.log(`[watch-ext] ${new Date().toLocaleTimeString()}  ${msg}`);
 }
 
-function run(cmd, label) {
-  log(`▶ ${label}`);
+function run(cmd, label, { silent = false } = {}) {
+  if (!silent) log(`▶ ${label}`);
   try {
-    execSync(cmd, { cwd: ROOT, stdio: 'inherit' });
+    execSync(cmd, { cwd: ROOT, stdio: silent ? 'pipe' : 'inherit' });
     return true;
   } catch {
-    log(`✖ ${label} failed`);
+    if (!silent) log(`✖ ${label} failed`);
     return false;
   }
 }
@@ -76,8 +76,8 @@ async function buildAndReinstall(changedFile) {
   const ok2 = run(`npx @vscode/vsce package --allow-missing-repository --no-update-package-json`, 'vsce package');
   if (!ok2) { building = false; return; }
 
-  // Uninstall first — ignore failures (extension may not be installed yet, or ID changed)
-  run(`code --uninstall-extension ${extId}`, `Uninstall ${extId}`);
+  // Uninstall first — silent, non-fatal (extension may not be installed yet)
+  run(`code --uninstall-extension ${extId}`, `Uninstall ${extId}`, { silent: true });
   // Brief pause so VS Code finishes cleanup before the reinstall
   await sleep(1500);
 
