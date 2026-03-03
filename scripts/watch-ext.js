@@ -51,6 +51,10 @@ function run(cmd, label) {
   }
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // ── Build pipeline ────────────────────────────────────────────────────────────
 
 async function buildAndReinstall(changedFile) {
