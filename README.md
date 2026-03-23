@@ -2,7 +2,7 @@
 title: Cerberus Security Scanner Backend
 emoji: 🛡️
 colorFrom: red
-colorTo: orange
+colorTo: pink
 sdk: docker
 pinned: false
 app_port: 7860
