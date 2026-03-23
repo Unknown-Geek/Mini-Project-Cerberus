@@ -461,74 +461,15 @@ async function applyIndividualFix(vulnerability: Vulnerability) {
 			}
 		}
 
-		// Strategy 3: Use line-based replacement (with safety checks)
-		if (originalIndex === -1 && vulnerability.line && vulnerability.endLine) {
-			const startLine = vulnerability.line - 1; // Convert to 0-indexed
-			const endLine = vulnerability.endLine - 1;
-
-			// Validate line numbers
-			if (startLine >= 0 && endLine < document.lineCount && startLine <= endLine) {
-				// Get the range for these lines
-				const startPos = new vscode.Position(startLine, 0);
-				const endPos = new vscode.Position(endLine, document.lineAt(endLine).text.length);
-				const range = new vscode.Range(startPos, endPos);
-
-				// Get the current content at these lines
-				const currentContent = document.getText(range);
-
-				// SAFETY CHECK 1: Don't replace if the range is too large (more than 100 lines)
-				const lineCount = endLine - startLine + 1;
-				if (lineCount > 100) {
-					vscode.window.showWarningMessage(
-						`Fix spans too many lines (${lineCount}). Use "Fix Entire File" instead.`
-					);
-					return;
-				}
-
-				// SAFETY CHECK 2: Don't replace if fixed code is much smaller than current
-				// This prevents accidentally deleting most of the file
-				if (fixedCode.length < currentContent.length * 0.3 && currentContent.length > 100) {
-					vscode.window.showWarningMessage(
-						'Fix appears to remove too much code. The file may have changed since scanning.'
-					);
-					return;
-				}
-
-				// SAFETY CHECK 3: Verify that the current content roughly matches the original
-				// by checking if they share significant common substrings
-				const normalizedCurrent = currentContent.replace(/\s+/g, ' ').trim();
-				const normalizedOriginal = originalCode.replace(/\s+/g, ' ').trim();
-				const similarity = calculateSimilarity(normalizedCurrent, normalizedOriginal);
-
-				if (similarity < 0.5) {
-					vscode.window.showWarningMessage(
-						'The code at these lines has changed. Please re-scan the file.'
-					);
-					return;
-				}
-
-				// Create the edit
-				const edit = new vscode.WorkspaceEdit();
-				edit.replace(document.uri, range, fixedCode);
-
-				isPatchingInProgress = true;
-				try {
-					const success = await vscode.workspace.applyEdit(edit);
-
-					if (success) {
-						await document.save();
-						const vulnType = vulnerability.type || 'vulnerability';
-						vscode.window.showInformationMessage(
-							`✅ Fixed ${vulnType} at line ${vulnerability.line} in ${path.basename(filePath)}`
-						);
-					} else {
-						vscode.window.showErrorMessage('Failed to apply fix.');
-					}
-				} finally {
-					setTimeout(() => { isPatchingInProgress = false; }, 500);
-				}
-				return;
-			}
+		// Strategy 3: Line-based replacement DISABLED
+		// This approach is unreliable because the fixedCode extraction from diffs
+		// often produces incorrect/corrupted code. Instead, guide users to Fix All.
+		if (originalIndex === -1) {
+			vscode.window.showWarningMessage(
+				`Could not locate the vulnerable code in the file. ` +
+				`The file may have changed since scanning. Please re-scan or use "Fix Entire File" instead.`
+			);
+			return;
 		}
 
 		// If we found exact match, use it
