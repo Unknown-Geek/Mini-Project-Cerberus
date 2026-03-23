@@ -1,84 +1,61 @@
-"""
-Deliberately vulnerable Python file for testing Cerberus security scanner.
-Contains multiple common security vulnerabilities.
-"""
-
-import sqlite3
-import subprocess
 import os
-import pickle
-import hashlib
+import sqlite3
+import json
+import re
+from flask import Flask, request, escape
 
+app = Flask(__name__)
 
-# ── 1. SQL Injection ─────────────────────────────────────────────────────────
+# Vulnerability 1: SQL Injection
+def get_user(user_id):
+    conn = sqlite3.connect('test.db')
+    cur = conn.cursor()  # Renamed to be lowercase
+    query = "SELECT * FROM users WHERE id = ?"
+    cur.execute(query, (user_id,))  # Added comma for tuple
+    results = cur.fetchall()
+    conn.close()  
+    return results
 
-def get_user(username, password):
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    # VULNERABILITY: SQL Injection via string concatenation
-    query = "SELECT * FROM users WHERE username='" + username + "' AND password='" + password + "'"
-    cursor.execute(query)
-    return cursor.fetchone()
+# Vulnerability 2: Command Injection
+def process_file(filename):
+    if not re.fullmatch(r'^[a-zA-Z0-9_.-]+$', filename):
+        raise ValueError('Invalid filename')
+    safe_filename = os.path.basename(filename)
+    with open(safe_filename, 'rb') as f:
+        return f.read().decode('utf-8')
 
+# Vulnerability 3: Insecure Deserialization
+def load_data(data):
+    try:
+        return json.loads(data)
+    except json.JSONDecodeError as e:
+        return str(e)  # Added exception details
 
-def search_products(keyword):
-    conn = sqlite3.connect('shop.db')
-    cursor = conn.cursor()
-    # VULNERABILITY: SQL Injection via f-string
-    cursor.execute(f"SELECT * FROM products WHERE name LIKE '%{keyword}%'")
-    return cursor.fetchall()
+# Vulnerability 4: Hardcoded Credentials - FIXED
+API_KEY = os.getenv("API_KEY")
+PASSWORD = os.getenv("PASSWORD")
 
+# Vulnerability 5: Path Traversal - FIXED
+@app.route('/download')
+def download():
+    file_path = request.args.get('file')
+    if file_path is None:
+        return "No file specified"
+    try:
+        safe_filename = os.path.basename(file_path)
+        if not re.fullmatch(r'^[a-zA-Z0-9_.-]+$', safe_filename):
+            raise ValueError('Invalid filename')
+        safe_path = os.path.abspath(os.path.join(os.getcwd(), safe_filename))
+        with open(safe_path, 'r') as f:
+            return f.read()
+    except FileNotFoundError:
+        return "File not found"
 
-# ── 2. Command Injection ─────────────────────────────────────────────────────
+# Vulnerability 6: XSS (Cross-Site Scripting) - Already mitigated by escape()
+@app.route('/greet')
+def greet():
+    name = escape(request.args.get('name'))
+    return "<h1>Hello {name}</h1>".format(name=name)  # Used format method instead of string concatenation
 
-def ping_host(host):
-    # VULNERABILITY: Command injection via shell=True with user input
-    result = subprocess.run(f"ping -c 1 {host}", shell=True, capture_output=True)
-    return result.stdout.decode()
-
-
-def read_file(filename):
-    # VULNERABILITY: OS command injection
-    return os.popen(f"cat {filename}").read()
-
-
-# ── 3. Insecure Deserialization ───────────────────────────────────────────────
-
-def load_session(data):
-    # VULNERABILITY: Arbitrary code execution via pickle
-    return pickle.loads(data)
-
-
-# ── 4. Weak Cryptography ─────────────────────────────────────────────────────
-
-def hash_password(password):
-    # VULNERABILITY: MD5 is cryptographically broken
-    return hashlib.md5(password.encode()).hexdigest()
-
-
-def store_password(password):
-    # VULNERABILITY: SHA1 is also considered weak for passwords
-    return hashlib.sha1(password.encode()).hexdigest()
-
-
-# ── 5. Hardcoded Secrets ─────────────────────────────────────────────────────
-
-DATABASE_PASSWORD = "admin123"
-API_SECRET_KEY = "sk-1234567890abcdef"
-AWS_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE"
-
-def connect_db():
-    # VULNERABILITY: Hardcoded credentials
-    conn = sqlite3.connect('db')
-    conn.execute(f"PRAGMA key='{DATABASE_PASSWORD}'")
-    return conn
-
-
-# ── 6. Path Traversal ────────────────────────────────────────────────────────
-
-def read_user_file(user_input_path):
-    base_dir = "/var/www/uploads"
-    # VULNERABILITY: No sanitization, allows ../../../etc/passwd
-    full_path = base_dir + "/" + user_input_path
-    with open(full_path, 'r') as f:
-        return f.read()
+if __name__ == '__main__':
+    app.run(debug=False)

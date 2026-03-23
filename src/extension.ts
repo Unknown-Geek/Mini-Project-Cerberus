@@ -115,12 +115,18 @@ export function activate(context: vscode.ExtensionContext) {
 
 			vulnerabilityProvider.setVulnerabilities(vulnerabilities);
 
-			const analyzedCount = vulnerabilities.filter((v: Vulnerability) => v.status === 'analyzed').length;
+			const analyzedVulns = vulnerabilities.filter((v: Vulnerability) => v.status === 'analyzed');
 			const errorCount = vulnerabilities.filter((v: Vulnerability) => v.status === 'error').length;
 
-			if (analyzedCount > 0) {
+			if (analyzedVulns.length > 0) {
+				// Build a summary of found issues
+				const typesSummary = [...new Set(analyzedVulns.map(v => v.type).filter(Boolean))];
+				const summaryText = typesSummary.length > 0
+					? `Found: ${typesSummary.join(', ')}`
+					: `Found ${analyzedVulns.length} issues`;
+
 				vscode.window.showInformationMessage(
-					`✅ Cerberus: Found ${analyzedCount} issues in ${fileName}.`
+					`✅ Cerberus: ${summaryText} in ${fileName}. Check the sidebar for details.`
 				);
 			} else if (errorCount > 0) {
 				vscode.window.showWarningMessage(
@@ -152,7 +158,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// ============================
-	// FIX COMMANDS (unchanged)
+	// FIX COMMANDS
 	// ============================
 	const fixDisposable = vscode.commands.registerCommand('cerberus.fixVulnerability', async (item?: VulnerabilityItem) => {
 		if (!item || !item.vulnerability) {
@@ -160,11 +166,20 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		const vulnerability = item.vulnerability;
-		if (vulnerability.status !== 'analyzed' || !vulnerability.result) {
+		if (vulnerability.status !== 'analyzed') {
 			vscode.window.showErrorMessage('No fix available for this vulnerability.');
 			return;
 		}
-		await applyFix(vulnerability.file, vulnerability.result);
+
+		// If we have specific fixed code for this vulnerability
+		if (vulnerability.fixedCode && vulnerability.originalCode && vulnerability.line) {
+			await applyIndividualFix(vulnerability);
+		} else if (vulnerability.result) {
+			// Fall back to full file replacement
+			await applyFix(vulnerability.file, vulnerability.result);
+		} else {
+			vscode.window.showErrorMessage('No fix available for this vulnerability.');
+		}
 	});
 
 	const fixFileDisposable = vscode.commands.registerCommand('cerberus.fixFile', async (item?: VulnerabilityItem) => {
@@ -177,12 +192,25 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showWarningMessage('No vulnerabilities found for this file.');
 			return;
 		}
-		const fixableVuln = fileVulns.find(v => v.status === 'analyzed' && v.result);
-		if (!fixableVuln) {
-			vscode.window.showErrorMessage('No fixes available for this file.');
-			return;
+
+		// Get the full corrected code from stored fix
+		const filePath = fileVulns[0].file;
+		try {
+			const response = await axios.get(`${BACKEND_URL}/api/stored-fix`, {
+				params: { path: filePath },
+				timeout: 10000
+			});
+			const { correctedCode } = response.data;
+			await applyFix(filePath, correctedCode);
+		} catch (error: any) {
+			// Fallback: use the result from the first fixable vulnerability
+			const fixableVuln = fileVulns.find(v => v.status === 'analyzed' && v.result);
+			if (fixableVuln) {
+				await applyFix(fixableVuln.file, fixableVuln.result!);
+			} else {
+				vscode.window.showErrorMessage('No fixes available for this file.');
+			}
 		}
-		await applyFix(fixableVuln.file, fixableVuln.result!);
 	});
 
 	const viewDisposable = vscode.commands.registerCommand('cerberus.viewResults', () => {
@@ -379,6 +407,68 @@ async function applyFix(filePath: string, correctedCode: string) {
 			vscode.window.showInformationMessage(`✅ Fix applied and saved: ${path.basename(filePath)}`);
 		} else {
 			vscode.window.showErrorMessage('Failed to apply fix.');
+		}
+	} catch (error) {
+		vscode.window.showErrorMessage(`Error applying fix: ${error}`);
+	}
+}
+
+// ============================
+// APPLY INDIVIDUAL FIX (specific vulnerability)
+// ============================
+async function applyIndividualFix(vulnerability: Vulnerability) {
+	try {
+		const filePath = vulnerability.file;
+
+		if (!fs.existsSync(filePath)) {
+			vscode.window.showErrorMessage(`File not found: ${filePath}`);
+			return;
+		}
+
+		const document = await vscode.workspace.openTextDocument(filePath);
+		await vscode.window.showTextDocument(document);
+
+		const startLine = (vulnerability.line || 1) - 1; // Convert to 0-indexed
+		const endLine = (vulnerability.endLine || vulnerability.line || 1) - 1;
+
+		// Find the original code in the document
+		const originalLines = vulnerability.originalCode?.split('\n') || [];
+		const fixedLines = vulnerability.fixedCode?.split('\n') || [];
+
+		if (originalLines.length === 0 || fixedLines.length === 0) {
+			vscode.window.showErrorMessage('Invalid fix data for this vulnerability.');
+			return;
+		}
+
+		// Create the edit
+		const edit = new vscode.WorkspaceEdit();
+
+		// Calculate the range to replace
+		const startPos = new vscode.Position(startLine, 0);
+		const endPos = new vscode.Position(
+			Math.min(endLine, document.lineCount - 1),
+			document.lineAt(Math.min(endLine, document.lineCount - 1)).text.length
+		);
+		const range = new vscode.Range(startPos, endPos);
+
+		// Replace with fixed code
+		edit.replace(document.uri, range, vulnerability.fixedCode || '');
+
+		isPatchingInProgress = true;
+		try {
+			const success = await vscode.workspace.applyEdit(edit);
+
+			if (success) {
+				await document.save();
+				const vulnType = vulnerability.type || 'vulnerability';
+				vscode.window.showInformationMessage(
+					`✅ Fixed ${vulnType} at line ${vulnerability.line} in ${path.basename(filePath)}`
+				);
+			} else {
+				vscode.window.showErrorMessage('Failed to apply fix.');
+			}
+		} finally {
+			setTimeout(() => { isPatchingInProgress = false; }, 500);
 		}
 	} catch (error) {
 		vscode.window.showErrorMessage(`Error applying fix: ${error}`);

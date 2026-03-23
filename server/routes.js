@@ -17,6 +17,10 @@ const {
   N8NWebhookUpstreamError,
   N8NWebhookResponseError
 } = require('./n8nClient');
+const {
+  extractVulnerabilities,
+  applyIndividualFix
+} = require('./diffAnalyzer');
 
 const router = express.Router();
 
@@ -470,6 +474,7 @@ router.get('/api/stored-fix', async (req, res) => {
 /**
  * POST /api/scan-file
  * Scan a single file for vulnerabilities (with automatic chunking for large files)
+ * Returns individual vulnerabilities with line numbers and specific fixes
  */
 router.post('/api/scan-file', async (req, res) => {
   // Validate request is JSON
@@ -492,23 +497,54 @@ router.post('/api/scan-file', async (req, res) => {
 
   console.log(`Scanning single file: ${filePath} (${code.length} chars)`);
 
-  const vulnerabilities = [];
-
   try {
-    const result = await scanFileCode(code, filePath);
+    const correctedCode = await scanFileCode(code, filePath);
 
-    vulnerabilities.push({
-      file: filePath,
-      status: 'analyzed',
-      result
+    // Extract individual vulnerabilities by comparing original and corrected code
+    const vulnerabilities = extractVulnerabilities(code, correctedCode, filePath);
+
+    // If no individual vulnerabilities found but code changed, create a generic one
+    if (vulnerabilities.length === 0 && code !== correctedCode) {
+      vulnerabilities.push({
+        file: filePath,
+        line: 1,
+        endLine: code.split('\n').length,
+        type: 'Security Issues',
+        severity: 'medium',
+        description: 'Multiple security improvements applied',
+        originalCode: code,
+        fixedCode: correctedCode,
+        status: 'analyzed',
+        result: correctedCode // Keep for backward compatibility
+      });
+    }
+
+    // Also add the full corrected code as 'result' for backward compatibility
+    vulnerabilities.forEach(v => {
+      if (!v.result) {
+        v.result = v.fixedCode;
+      }
     });
 
-    // Persist to temp file so command-palette Apply Fix can use it
-    await storeResult(filePath, result);
-    console.log(`✅ File analyzed successfully: ${filePath}`);
+    // Persist full corrected code to temp file for Apply Fix command
+    if (correctedCode !== code) {
+      await storeResult(filePath, correctedCode);
+    }
+
+    // Also store individual vulnerabilities for the dashboard
+    await storeVulnerabilities(filePath, vulnerabilities, correctedCode);
+
+    console.log(`✅ File analyzed successfully: ${filePath} - Found ${vulnerabilities.length} issues`);
+
+    res.json({
+      files_scanned: 1,
+      vulnerabilities,
+      full_corrected_code: correctedCode
+    });
   } catch (error) {
     console.error(`❌ Error analyzing file ${filePath}:`, error.message);
 
+    const vulnerabilities = [];
     if (error instanceof N8NWebhookTimeoutError) {
       vulnerabilities.push({ file: filePath, status: 'error', error: 'Analysis timed out' });
     } else if (error instanceof N8NWebhookUpstreamError || error instanceof N8NWebhookResponseError) {
@@ -516,12 +552,87 @@ router.post('/api/scan-file', async (req, res) => {
     } else {
       vulnerabilities.push({ file: filePath, status: 'error', error: 'Unexpected error during analysis' });
     }
+
+    res.json({
+      files_scanned: 1,
+      vulnerabilities
+    });
+  }
+});
+
+/**
+ * Store individual vulnerabilities to temp file
+ */
+async function storeVulnerabilities(filePath, vulnerabilities, fullCorrectedCode) {
+  const key = crypto.createHash('sha1').update(filePath).digest('hex');
+  const tmpFile = path.join(CERBERUS_TMP_DIR, `${key}-vulns.json`);
+  await fs.writeFile(tmpFile, JSON.stringify({
+    filePath,
+    vulnerabilities,
+    fullCorrectedCode,
+    storedAt: new Date().toISOString()
+  }), 'utf8');
+  console.log(`[STORE] Saved ${vulnerabilities.length} vulnerabilities for ${path.basename(filePath)}`);
+}
+
+/**
+ * GET /api/stored-vulnerabilities?path=<absolute-file-path>
+ * Returns stored individual vulnerabilities for a given file
+ */
+router.get('/api/stored-vulnerabilities', async (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath || typeof filePath !== 'string') {
+    return res.status(400).json({ error: 'Missing query param: path' });
+  }
+  const key = crypto.createHash('sha1').update(filePath).digest('hex');
+  const tmpFile = path.join(CERBERUS_TMP_DIR, `${key}-vulns.json`);
+  try {
+    const raw = await fs.readFile(tmpFile, 'utf8');
+    const data = JSON.parse(raw);
+    return res.json(data);
+  } catch {
+    return res.status(404).json({
+      error: 'No stored vulnerabilities',
+      message: `No scan result stored for ${path.basename(filePath)}. Run a scan first.`
+    });
+  }
+});
+
+/**
+ * POST /api/apply-individual-fix
+ * Apply a specific fix for one vulnerability
+ */
+router.post('/api/apply-individual-fix', async (req, res) => {
+  const { filePath, vulnerabilityIndex, currentCode } = req.body;
+
+  if (!filePath || vulnerabilityIndex === undefined || !currentCode) {
+    return res.status(400).json({
+      error: 'Invalid payload',
+      message: 'Fields filePath, vulnerabilityIndex, and currentCode are required'
+    });
   }
 
-  res.json({
-    files_scanned: 1,
-    vulnerabilities
-  });
+  const key = crypto.createHash('sha1').update(filePath).digest('hex');
+  const tmpFile = path.join(CERBERUS_TMP_DIR, `${key}-vulns.json`);
+
+  try {
+    const raw = await fs.readFile(tmpFile, 'utf8');
+    const { vulnerabilities } = JSON.parse(raw);
+
+    if (vulnerabilityIndex < 0 || vulnerabilityIndex >= vulnerabilities.length) {
+      return res.status(400).json({ error: 'Invalid vulnerability index' });
+    }
+
+    const vuln = vulnerabilities[vulnerabilityIndex];
+    const fixedCode = applyIndividualFix(currentCode, vuln);
+
+    return res.json({ fixedCode, appliedVulnerability: vuln });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Failed to apply fix',
+      message: error.message
+    });
+  }
 });
 
 module.exports = router;
