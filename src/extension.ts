@@ -436,56 +436,102 @@ async function applyIndividualFix(vulnerability: Vulnerability) {
 			return;
 		}
 
-		// Get the current document text
-		const documentText = document.getText();
-
-		// Find the original code in the document
-		const originalIndex = documentText.indexOf(originalCode);
-
-		if (originalIndex === -1) {
-			// Original code not found - maybe already fixed or file changed
-			// Try line-based replacement as fallback
-			const startLine = (vulnerability.line || 1) - 1;
-			const endLine = (vulnerability.endLine || vulnerability.line || 1) - 1;
-
-			// Check if this is a full-file replacement (generic case)
-			if (startLine === 0 && endLine >= document.lineCount - 1) {
-				// Full file replacement - use the stored full corrected code
-				await applyFix(filePath, fixedCode);
-				return;
-			}
-
-			vscode.window.showWarningMessage(
-				'Original code not found in file. The file may have been modified.'
-			);
+		// If original and fixed are the same, nothing to do
+		if (originalCode === fixedCode) {
+			vscode.window.showInformationMessage('This vulnerability appears to already be fixed.');
 			return;
 		}
 
-		// Calculate the range to replace based on the found position
-		const startPos = document.positionAt(originalIndex);
-		const endPos = document.positionAt(originalIndex + originalCode.length);
-		const range = new vscode.Range(startPos, endPos);
+		const documentText = document.getText();
 
-		// Create the edit
-		const edit = new vscode.WorkspaceEdit();
-		edit.replace(document.uri, range, fixedCode);
+		// Strategy 1: Try exact string match first
+		let originalIndex = documentText.indexOf(originalCode);
 
-		isPatchingInProgress = true;
-		try {
-			const success = await vscode.workspace.applyEdit(edit);
-
-			if (success) {
-				await document.save();
-				const vulnType = vulnerability.type || 'vulnerability';
-				vscode.window.showInformationMessage(
-					`✅ Fixed ${vulnType} at line ${vulnerability.line} in ${path.basename(filePath)}`
-				);
-			} else {
-				vscode.window.showErrorMessage('Failed to apply fix.');
+		// Strategy 2: Try trimmed match (ignore leading/trailing whitespace differences)
+		if (originalIndex === -1) {
+			const trimmedOriginal = originalCode.trim();
+			const trimmedDocText = documentText;
+			// Search for trimmed version
+			const searchIndex = trimmedDocText.indexOf(trimmedOriginal);
+			if (searchIndex !== -1) {
+				// Find the actual start (include leading whitespace on the line)
+				const lineStart = trimmedDocText.lastIndexOf('\n', searchIndex) + 1;
+				originalIndex = lineStart;
+				// Adjust to use the trimmed original for replacement
 			}
-		} finally {
-			setTimeout(() => { isPatchingInProgress = false; }, 500);
 		}
+
+		// Strategy 3: Use line-based replacement
+		if (originalIndex === -1 && vulnerability.line && vulnerability.endLine) {
+			const startLine = vulnerability.line - 1; // Convert to 0-indexed
+			const endLine = vulnerability.endLine - 1;
+
+			// Validate line numbers
+			if (startLine >= 0 && endLine < document.lineCount && startLine <= endLine) {
+				// Get the range for these lines
+				const startPos = new vscode.Position(startLine, 0);
+				const endPos = new vscode.Position(endLine, document.lineAt(endLine).text.length);
+				const range = new vscode.Range(startPos, endPos);
+
+				// Get the current content at these lines
+				const currentContent = document.getText(range);
+
+				// Create the edit
+				const edit = new vscode.WorkspaceEdit();
+				edit.replace(document.uri, range, fixedCode);
+
+				isPatchingInProgress = true;
+				try {
+					const success = await vscode.workspace.applyEdit(edit);
+
+					if (success) {
+						await document.save();
+						const vulnType = vulnerability.type || 'vulnerability';
+						vscode.window.showInformationMessage(
+							`✅ Fixed ${vulnType} at line ${vulnerability.line} in ${path.basename(filePath)}`
+						);
+					} else {
+						vscode.window.showErrorMessage('Failed to apply fix.');
+					}
+				} finally {
+					setTimeout(() => { isPatchingInProgress = false; }, 500);
+				}
+				return;
+			}
+		}
+
+		// If we found exact match, use it
+		if (originalIndex !== -1) {
+			const startPos = document.positionAt(originalIndex);
+			const endPos = document.positionAt(originalIndex + originalCode.length);
+			const range = new vscode.Range(startPos, endPos);
+
+			const edit = new vscode.WorkspaceEdit();
+			edit.replace(document.uri, range, fixedCode);
+
+			isPatchingInProgress = true;
+			try {
+				const success = await vscode.workspace.applyEdit(edit);
+
+				if (success) {
+					await document.save();
+					const vulnType = vulnerability.type || 'vulnerability';
+					vscode.window.showInformationMessage(
+						`✅ Fixed ${vulnType} at line ${vulnerability.line} in ${path.basename(filePath)}`
+					);
+				} else {
+					vscode.window.showErrorMessage('Failed to apply fix.');
+				}
+			} finally {
+				setTimeout(() => { isPatchingInProgress = false; }, 500);
+			}
+			return;
+		}
+
+		// No match found
+		vscode.window.showWarningMessage(
+			'Could not locate the vulnerable code. The file may have been modified.'
+		);
 	} catch (error) {
 		vscode.window.showErrorMessage(`Error applying fix: ${error}`);
 	}

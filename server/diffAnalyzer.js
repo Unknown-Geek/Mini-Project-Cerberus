@@ -390,21 +390,78 @@ function extractVulnerabilities(original, corrected, filePath) {
   // Track which comment-based vulns have been matched with fixes
   const matchedVulnIndices = new Set();
 
+  // Build a mapping from original line numbers to corrected line numbers
+  // This helps us find the corresponding corrected lines for a block
+  let lineOffset = 0;
+  const lineMapping = new Map(); // originalLine -> correctedLine
+
+  for (const change of changes) {
+    if (change.type === 'modified') {
+      lineMapping.set(change.originalLine, change.correctedLine);
+    } else if (change.type === 'removed') {
+      lineOffset--;
+    } else if (change.type === 'added') {
+      lineOffset++;
+    }
+  }
+
   // Process diff blocks and try to match with comment-based vulnerabilities
   for (const block of blocks) {
     const startIdx = block.startLine - 1;
     const endIdx = block.endLine;
 
+    // Get original code block
     const originalBlockLines = originalLines.slice(startIdx, endIdx);
     const originalCode = originalBlockLines.join('\n');
 
-    const correctedCode = block.changes
-      .filter(c => c.corrected !== undefined)
-      .map(c => c.corrected)
-      .join('\n');
+    // Calculate the corresponding range in corrected code
+    // We need to find where this block maps to in the corrected version
+    let correctedStartIdx = startIdx;
+    let correctedEndIdx = endIdx;
+
+    // Adjust for line additions/removals before this block
+    let adjustOffset = 0;
+    for (const change of changes) {
+      if (change.originalLine && change.originalLine < block.startLine) {
+        if (change.type === 'removed') {
+          adjustOffset--;
+        }
+      }
+      if (change.correctedLine && change.correctedLine < block.startLine) {
+        if (change.type === 'added') {
+          adjustOffset++;
+        }
+      }
+    }
+
+    // Find the first and last corrected line numbers in this block
+    const blockCorrectedLines = block.changes
+      .filter(c => c.correctedLine !== undefined)
+      .map(c => c.correctedLine);
+
+    if (blockCorrectedLines.length > 0) {
+      correctedStartIdx = Math.min(...blockCorrectedLines) - 1;
+      correctedEndIdx = Math.max(...blockCorrectedLines);
+    } else {
+      correctedStartIdx = startIdx + adjustOffset;
+      correctedEndIdx = endIdx + adjustOffset;
+    }
+
+    // Ensure indices are valid
+    correctedStartIdx = Math.max(0, correctedStartIdx);
+    correctedEndIdx = Math.min(correctedLines.length, correctedEndIdx);
+
+    // Get corrected code block
+    const correctedBlockLines = correctedLines.slice(correctedStartIdx, correctedEndIdx);
+    const correctedCode = correctedBlockLines.join('\n');
 
     // Skip if only whitespace changes
     if (originalCode.replace(/\s/g, '') === correctedCode.replace(/\s/g, '')) {
+      continue;
+    }
+
+    // Skip if no actual difference
+    if (originalCode === correctedCode) {
       continue;
     }
 
