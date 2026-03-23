@@ -292,12 +292,213 @@ router.post('/api/scan', scanLimiter, async (req, res) => {
   });
 });
 
-// ── Chunking helper ──────────────────────────────────────────────────────────
-// Splits code into line-based chunks that target MAX_CHUNK_CHARS characters
-// each, so every n8n call stays well under a reverse-proxy 60-second timeout.
-const MAX_CHUNK_CHARS = parseInt(process.env.MAX_CHUNK_CHARS || '1500', 10);
-// Lines of previous chunk to prepend as context so the AI understands continuations
-const OVERLAP_LINES = parseInt(process.env.OVERLAP_LINES || '5', 10);
+// ── Logical Chunking ─────────────────────────────────────────────────────────
+// Splits code into logically independent chunks (functions, classes, blocks)
+// so each n8n call has complete context for proper analysis.
+
+/**
+ * Parse Python code into logical blocks (imports, functions, classes, etc.)
+ * Each block is a self-contained unit that can be analyzed independently.
+ * @param {string} code - The Python source code
+ * @returns {Array<{type: string, name: string, startLine: number, endLine: number, code: string}>}
+ */
+function parseIntoLogicalBlocks(code) {
+  const lines = code.split('\n');
+  const blocks = [];
+
+  let currentBlock = null;
+  let importBlock = { type: 'imports', name: 'imports', startLine: 0, lines: [] };
+  let globalBlock = { type: 'global', name: 'global', startLine: 0, lines: [] };
+
+  // Patterns to detect block starts
+  const functionPattern = /^(\s*)def\s+(\w+)\s*\(/;
+  const classPattern = /^(\s*)class\s+(\w+)/;
+  const decoratorPattern = /^(\s*)@(\w+)/;
+  const asyncFunctionPattern = /^(\s*)async\s+def\s+(\w+)\s*\(/;
+  const importPattern = /^(import\s+|from\s+\w+\s+import)/;
+  const commentBlockPattern = /^#\s*(?:Vulnerability|TODO|FIXME|NOTE)/i;
+
+  let decoratorLines = [];
+  let inClass = false;
+  let classIndent = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmedLine = line.trimStart();
+    const indent = line.length - trimmedLine.length;
+
+    // Check for decorator
+    const decoratorMatch = line.match(decoratorPattern);
+    if (decoratorMatch && !currentBlock) {
+      decoratorLines.push({ lineNum: i, line });
+      continue;
+    }
+
+    // Check for import statements
+    if (importPattern.test(trimmedLine) && !currentBlock) {
+      if (importBlock.lines.length === 0) {
+        importBlock.startLine = i;
+      }
+      importBlock.lines.push({ lineNum: i, line });
+      decoratorLines = [];
+      continue;
+    }
+
+    // Check for class definition
+    const classMatch = line.match(classPattern);
+    if (classMatch && (!currentBlock || indent <= (currentBlock.indent || 0))) {
+      // Save previous block
+      if (currentBlock) {
+        currentBlock.endLine = i - 1;
+        currentBlock.code = currentBlock.lines.map(l => l.line).join('\n');
+        blocks.push(currentBlock);
+      }
+
+      // Start new class block
+      currentBlock = {
+        type: 'class',
+        name: classMatch[2],
+        startLine: decoratorLines.length > 0 ? decoratorLines[0].lineNum : i,
+        indent: indent,
+        lines: [...decoratorLines.map(d => d), { lineNum: i, line }]
+      };
+      decoratorLines = [];
+      inClass = true;
+      classIndent = indent;
+      continue;
+    }
+
+    // Check for function definition
+    const funcMatch = line.match(functionPattern) || line.match(asyncFunctionPattern);
+    if (funcMatch) {
+      const funcIndent = funcMatch[1].length;
+
+      // If this is a top-level function or we're outside the current block
+      if (!currentBlock || funcIndent <= (currentBlock.indent || 0)) {
+        // Save previous block
+        if (currentBlock) {
+          currentBlock.endLine = i - 1;
+          currentBlock.code = currentBlock.lines.map(l => l.line).join('\n');
+          blocks.push(currentBlock);
+        }
+
+        // Start new function block
+        currentBlock = {
+          type: 'function',
+          name: funcMatch[2],
+          startLine: decoratorLines.length > 0 ? decoratorLines[0].lineNum : i,
+          indent: funcIndent,
+          lines: [...decoratorLines.map(d => d), { lineNum: i, line }]
+        };
+        decoratorLines = [];
+        inClass = false;
+        continue;
+      }
+    }
+
+    // Check for vulnerability comment block (treat as separate analyzable unit)
+    if (commentBlockPattern.test(trimmedLine) && !currentBlock) {
+      // This starts a new logical section
+      if (globalBlock.lines.length > 0) {
+        globalBlock.endLine = i - 1;
+        globalBlock.code = globalBlock.lines.map(l => l.line).join('\n');
+        if (globalBlock.code.trim()) {
+          blocks.push({ ...globalBlock });
+        }
+        globalBlock = { type: 'global', name: 'global', startLine: i, lines: [] };
+      }
+    }
+
+    // Add line to current block or global
+    if (currentBlock) {
+      // Check if we've exited the current block (dedented)
+      if (trimmedLine && indent <= currentBlock.indent && !line.match(/^\s*#/) && !line.match(/^\s*$/)) {
+        // End current block
+        currentBlock.endLine = i - 1;
+        currentBlock.code = currentBlock.lines.map(l => l.line).join('\n');
+        blocks.push(currentBlock);
+        currentBlock = null;
+
+        // This line starts something new, reprocess it
+        i--;
+        continue;
+      }
+      currentBlock.lines.push({ lineNum: i, line });
+    } else {
+      // Add to global block
+      if (globalBlock.lines.length === 0) {
+        globalBlock.startLine = i;
+      }
+      globalBlock.lines.push({ lineNum: i, line });
+    }
+  }
+
+  // Finalize any remaining blocks
+  if (currentBlock) {
+    currentBlock.endLine = lines.length - 1;
+    currentBlock.code = currentBlock.lines.map(l => l.line).join('\n');
+    blocks.push(currentBlock);
+  }
+
+  // Add imports block if it has content
+  if (importBlock.lines.length > 0) {
+    importBlock.endLine = importBlock.lines[importBlock.lines.length - 1].lineNum;
+    importBlock.code = importBlock.lines.map(l => l.line).join('\n');
+    blocks.unshift(importBlock); // Put imports first
+  }
+
+  // Add remaining global block
+  if (globalBlock.lines.length > 0) {
+    globalBlock.endLine = globalBlock.lines[globalBlock.lines.length - 1].lineNum;
+    globalBlock.code = globalBlock.lines.map(l => l.line).join('\n');
+    if (globalBlock.code.trim()) {
+      blocks.push(globalBlock);
+    }
+  }
+
+  return blocks;
+}
+
+/**
+ * Group small blocks together to avoid too many API calls,
+ * while keeping logical separation.
+ * @param {Array} blocks - Parsed logical blocks
+ * @param {number} maxChars - Maximum characters per chunk
+ * @returns {Array<{blocks: Array, code: string, startLine: number, endLine: number}>}
+ */
+function groupBlocksIntoChunks(blocks, maxChars) {
+  const chunks = [];
+  let currentChunk = { blocks: [], code: '', startLine: 0, endLine: 0 };
+
+  for (const block of blocks) {
+    const blockCode = block.code || '';
+
+    // If adding this block would exceed the limit, start a new chunk
+    if (currentChunk.code.length > 0 &&
+        currentChunk.code.length + blockCode.length > maxChars) {
+      chunks.push(currentChunk);
+      currentChunk = { blocks: [], code: '', startLine: block.startLine, endLine: block.endLine };
+    }
+
+    // Add block to current chunk
+    currentChunk.blocks.push(block);
+    currentChunk.code += (currentChunk.code ? '\n\n' : '') + blockCode;
+    if (currentChunk.blocks.length === 1) {
+      currentChunk.startLine = block.startLine;
+    }
+    currentChunk.endLine = block.endLine;
+  }
+
+  // Add the last chunk
+  if (currentChunk.blocks.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
+// Maximum characters per logical chunk (larger than before since chunks are coherent)
+const MAX_CHUNK_CHARS = parseInt(process.env.MAX_CHUNK_CHARS || '3000', 10);
 
 // Responses the n8n AI emits when it can't make sense of a snippet
 const BOGUS_PATTERNS = [
@@ -335,96 +536,71 @@ function isBogusResponse(original, corrected) {
 }
 
 /**
- * Split code into chunks of ~targetChars characters, aligned to line boundaries.
- * @param {string} code
- * @param {number} targetChars
- * @returns {{ lines: string[], startLine: number }[]}
- */
-function chunkCode(code, targetChars) {
-  const lines = code.split('\n');
-  const avgLen = Math.max(1, code.length / lines.length);
-  const linesPerChunk = Math.max(20, Math.round(targetChars / avgLen));
-
-  const chunks = [];
-  for (let i = 0; i < lines.length; i += linesPerChunk) {
-    chunks.push({ lines: lines.slice(i, i + linesPerChunk), startLine: i });
-  }
-  return chunks;
-}
-
-/**
- * Scan a file, using chunked n8n calls when the file exceeds MAX_CHUNK_CHARS.
- * Each chunk is sent with OVERLAP_LINES of context from the previous chunk so
- * the AI understands mid-file continuations. Bogus responses are replaced with
- * the original chunk so no code is silently dropped.
+ * Scan a file using logical chunking.
+ * Splits code into functions, classes, and logical blocks so each AI call
+ * has complete context. Reassembles the corrected chunks at the end.
  */
 async function scanFileCode(code, filePath) {
   const timeoutSeconds = parseFloat(process.env.N8N_TIMEOUT_SECONDS || '120');
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
 
+  // For small files, send the whole thing
   if (code.length <= MAX_CHUNK_CHARS) {
-    // Small file — single call
     let result = await patchCodeViaN8n({ code, webhookUrl, timeoutSeconds });
     result = stripMarkdownFences(result);
     if (isBogusResponse(code, result)) {
-      console.warn(`[CHUNK] Single-call response looks bogus, keeping original`);
+      console.warn(`[SCAN] Single-call response looks bogus, keeping original`);
       return code;
     }
     return result;
   }
 
-  // Large file — split into chunks, scan each, reassemble
-  const allLines = code.split('\n');
-  const chunks = chunkCode(code, MAX_CHUNK_CHARS);
-  console.log(`[CHUNK] ${path.basename(filePath)}: ${code.length} chars → ${chunks.length} chunks (limit ${MAX_CHUNK_CHARS})`);
+  // Parse code into logical blocks (functions, classes, imports, etc.)
+  const blocks = parseIntoLogicalBlocks(code);
+  console.log(`[SCAN] ${path.basename(filePath)}: Parsed ${blocks.length} logical blocks`);
 
-  const correctedLines = [...allLines]; // start with original; patch in place
+  // Log the blocks for debugging
+  blocks.forEach((b, i) => {
+    console.log(`  Block ${i + 1}: ${b.type} "${b.name}" (lines ${b.startLine + 1}-${b.endLine + 1}, ${b.code?.length || 0} chars)`);
+  });
 
-  // lineOffset tracks how many lines have been added/removed by previous chunks
-  // so we can splice at the correct adjusted position in correctedLines.
-  let lineOffset = 0;
+  // Group small blocks into chunks to reduce API calls
+  const chunks = groupBlocksIntoChunks(blocks, MAX_CHUNK_CHARS);
+  console.log(`[SCAN] Grouped into ${chunks.length} chunks for analysis`);
+
+  // Process each chunk
+  const correctedChunks = [];
 
   for (let i = 0; i < chunks.length; i++) {
-    const { lines: chunkLines, startLine } = chunks[i];
-    const adjustedStart = startLine + lineOffset;
-    const endLine = startLine + chunkLines.length - 1;
-
-    // Prepend overlap context from the already-corrected lines above
-    const contextLines = adjustedStart > 0
-      ? correctedLines.slice(Math.max(0, adjustedStart - OVERLAP_LINES), adjustedStart)
-      : [];
-    const payload = [...contextLines, ...chunkLines].join('\n');
-
-    console.log(`[CHUNK] Processing chunk ${i + 1}/${chunks.length} (lines ${startLine}-${endLine}, adjusted ${adjustedStart}, ${payload.length} chars, ${contextLines.length} context lines)`);
+    const chunk = chunks[i];
+    const blockNames = chunk.blocks.map(b => `${b.type}:${b.name}`).join(', ');
+    console.log(`[SCAN] Processing chunk ${i + 1}/${chunks.length}: ${blockNames} (${chunk.code.length} chars)`);
 
     try {
-      let corrected = await patchCodeViaN8n({ code: payload, webhookUrl, timeoutSeconds });
+      let corrected = await patchCodeViaN8n({
+        code: chunk.code,
+        webhookUrl,
+        timeoutSeconds
+      });
       corrected = stripMarkdownFences(corrected);
 
-      if (isBogusResponse(payload, corrected)) {
-        console.warn(`[CHUNK] Chunk ${i + 1} response looks bogus, keeping original`);
-        // correctedLines already has the original — nothing to do, offset unchanged
-        continue;
+      if (isBogusResponse(chunk.code, corrected)) {
+        console.warn(`[SCAN] Chunk ${i + 1} response looks bogus, keeping original`);
+        correctedChunks.push(chunk.code);
+      } else {
+        correctedChunks.push(corrected);
       }
-
-      // Strip the context lines back off the top of the response
-      const correctedAllLines = corrected.split('\n');
-      const stripped = contextLines.length > 0
-        ? correctedAllLines.slice(contextLines.length)
-        : correctedAllLines;
-
-      // Write stripped result back into correctedLines at the adjusted position
-      correctedLines.splice(adjustedStart, chunkLines.length, ...stripped);
-
-      // Update offset: positive if AI added lines, negative if it removed them
-      lineOffset += stripped.length - chunkLines.length;
-
     } catch (err) {
-      console.warn(`[CHUNK] Chunk ${i + 1} failed (${err.message}), keeping original`);
+      console.warn(`[SCAN] Chunk ${i + 1} failed (${err.message}), keeping original`);
+      correctedChunks.push(chunk.code);
     }
   }
 
-  return correctedLines.join('\n');
+  // Reassemble the corrected code
+  const correctedCode = correctedChunks.join('\n\n');
+
+  // Clean up any duplicate blank lines
+  return correctedCode.replace(/\n{3,}/g, '\n\n');
 }
 
 // ── Temp result store ────────────────────────────────────────────────────────
