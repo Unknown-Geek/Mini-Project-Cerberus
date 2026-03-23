@@ -461,7 +461,7 @@ async function applyIndividualFix(vulnerability: Vulnerability) {
 			}
 		}
 
-		// Strategy 3: Use line-based replacement
+		// Strategy 3: Use line-based replacement (with safety checks)
 		if (originalIndex === -1 && vulnerability.line && vulnerability.endLine) {
 			const startLine = vulnerability.line - 1; // Convert to 0-indexed
 			const endLine = vulnerability.endLine - 1;
@@ -475,6 +475,37 @@ async function applyIndividualFix(vulnerability: Vulnerability) {
 
 				// Get the current content at these lines
 				const currentContent = document.getText(range);
+
+				// SAFETY CHECK 1: Don't replace if the range is too large (more than 100 lines)
+				const lineCount = endLine - startLine + 1;
+				if (lineCount > 100) {
+					vscode.window.showWarningMessage(
+						`Fix spans too many lines (${lineCount}). Use "Fix Entire File" instead.`
+					);
+					return;
+				}
+
+				// SAFETY CHECK 2: Don't replace if fixed code is much smaller than current
+				// This prevents accidentally deleting most of the file
+				if (fixedCode.length < currentContent.length * 0.3 && currentContent.length > 100) {
+					vscode.window.showWarningMessage(
+						'Fix appears to remove too much code. The file may have changed since scanning.'
+					);
+					return;
+				}
+
+				// SAFETY CHECK 3: Verify that the current content roughly matches the original
+				// by checking if they share significant common substrings
+				const normalizedCurrent = currentContent.replace(/\s+/g, ' ').trim();
+				const normalizedOriginal = originalCode.replace(/\s+/g, ' ').trim();
+				const similarity = calculateSimilarity(normalizedCurrent, normalizedOriginal);
+
+				if (similarity < 0.5) {
+					vscode.window.showWarningMessage(
+						'The code at these lines has changed. Please re-scan the file.'
+					);
+					return;
+				}
 
 				// Create the edit
 				const edit = new vscode.WorkspaceEdit();
@@ -535,6 +566,36 @@ async function applyIndividualFix(vulnerability: Vulnerability) {
 	} catch (error) {
 		vscode.window.showErrorMessage(`Error applying fix: ${error}`);
 	}
+}
+
+// ============================
+// HELPER FUNCTIONS
+// ============================
+
+/**
+ * Calculate similarity between two strings (0-1 scale)
+ * Uses a simple character-based comparison
+ */
+function calculateSimilarity(str1: string, str2: string): number {
+	if (str1 === str2) return 1;
+	if (!str1 || !str2) return 0;
+
+	const longer = str1.length > str2.length ? str1 : str2;
+	const shorter = str1.length > str2.length ? str2 : str1;
+
+	if (longer.length === 0) return 1;
+
+	// Count matching characters in order
+	let matches = 0;
+	let shorterIdx = 0;
+	for (let i = 0; i < longer.length && shorterIdx < shorter.length; i++) {
+		if (longer[i] === shorter[shorterIdx]) {
+			matches++;
+			shorterIdx++;
+		}
+	}
+
+	return matches / longer.length;
 }
 
 // ============================

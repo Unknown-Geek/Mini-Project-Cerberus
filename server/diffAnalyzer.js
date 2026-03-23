@@ -416,44 +416,57 @@ function extractVulnerabilities(original, corrected, filePath) {
 
     // Calculate the corresponding range in corrected code
     // We need to find where this block maps to in the corrected version
-    let correctedStartIdx = startIdx;
-    let correctedEndIdx = endIdx;
 
-    // Adjust for line additions/removals before this block
-    let adjustOffset = 0;
+    // Count net line changes BEFORE this block to calculate offset
+    let offsetBeforeBlock = 0;
     for (const change of changes) {
       if (change.originalLine && change.originalLine < block.startLine) {
         if (change.type === 'removed') {
-          adjustOffset--;
+          offsetBeforeBlock--;
+        } else if (change.type === 'modified') {
+          // Modified doesn't change line count
         }
       }
-      if (change.correctedLine && change.correctedLine < block.startLine) {
-        if (change.type === 'added') {
-          adjustOffset++;
+      if (change.type === 'added' && change.correctedLine) {
+        // Check if this added line is before where our block would start in corrected
+        const expectedCorrectedStart = startIdx + offsetBeforeBlock;
+        if (change.correctedLine <= expectedCorrectedStart) {
+          offsetBeforeBlock++;
         }
       }
     }
 
-    // Find the first and last corrected line numbers in this block
-    const blockCorrectedLines = block.changes
-      .filter(c => c.correctedLine !== undefined)
-      .map(c => c.correctedLine);
-
-    if (blockCorrectedLines.length > 0) {
-      correctedStartIdx = Math.min(...blockCorrectedLines) - 1;
-      correctedEndIdx = Math.max(...blockCorrectedLines);
-    } else {
-      correctedStartIdx = startIdx + adjustOffset;
-      correctedEndIdx = endIdx + adjustOffset;
+    // Count net line changes WITHIN this block
+    let netChangeInBlock = 0;
+    for (const change of block.changes) {
+      if (change.type === 'added') {
+        netChangeInBlock++;
+      } else if (change.type === 'removed') {
+        netChangeInBlock--;
+      }
     }
+
+    // Calculate corrected block boundaries
+    // The corrected block starts at original start + offset from prior changes
+    // and spans the original size + net changes within the block
+    const originalBlockSize = endIdx - startIdx;
+    let correctedStartIdx = startIdx + offsetBeforeBlock;
+    let correctedEndIdx = correctedStartIdx + originalBlockSize + netChangeInBlock;
 
     // Ensure indices are valid
     correctedStartIdx = Math.max(0, correctedStartIdx);
-    correctedEndIdx = Math.min(correctedLines.length, correctedEndIdx);
+    correctedEndIdx = Math.min(correctedLines.length, Math.max(correctedEndIdx, correctedStartIdx + 1));
 
     // Get corrected code block
     const correctedBlockLines = correctedLines.slice(correctedStartIdx, correctedEndIdx);
-    const correctedCode = correctedBlockLines.join('\n');
+    let correctedCode = correctedBlockLines.join('\n');
+
+    // SAFETY CHECK: If correctedCode is drastically smaller than originalCode,
+    // something went wrong with the mapping. In this case, don't offer a fix.
+    if (correctedCode.length < originalCode.length * 0.3 && originalCode.length > 50) {
+      console.warn(`[DIFF] Block ${block.startLine}-${block.endLine}: corrected code too small (${correctedCode.length} vs ${originalCode.length}), skipping`);
+      continue; // Skip this block - can't reliably fix it
+    }
 
     // Skip if only whitespace changes
     if (originalCode.replace(/\s/g, '') === correctedCode.replace(/\s/g, '')) {
