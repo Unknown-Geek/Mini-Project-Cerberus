@@ -428,31 +428,47 @@ async function applyIndividualFix(vulnerability: Vulnerability) {
 		const document = await vscode.workspace.openTextDocument(filePath);
 		await vscode.window.showTextDocument(document);
 
-		const startLine = (vulnerability.line || 1) - 1; // Convert to 0-indexed
-		const endLine = (vulnerability.endLine || vulnerability.line || 1) - 1;
+		const originalCode = vulnerability.originalCode;
+		const fixedCode = vulnerability.fixedCode;
 
-		// Find the original code in the document
-		const originalLines = vulnerability.originalCode?.split('\n') || [];
-		const fixedLines = vulnerability.fixedCode?.split('\n') || [];
-
-		if (originalLines.length === 0 || fixedLines.length === 0) {
+		if (!originalCode || !fixedCode) {
 			vscode.window.showErrorMessage('Invalid fix data for this vulnerability.');
 			return;
 		}
 
-		// Create the edit
-		const edit = new vscode.WorkspaceEdit();
+		// Get the current document text
+		const documentText = document.getText();
 
-		// Calculate the range to replace
-		const startPos = new vscode.Position(startLine, 0);
-		const endPos = new vscode.Position(
-			Math.min(endLine, document.lineCount - 1),
-			document.lineAt(Math.min(endLine, document.lineCount - 1)).text.length
-		);
+		// Find the original code in the document
+		const originalIndex = documentText.indexOf(originalCode);
+
+		if (originalIndex === -1) {
+			// Original code not found - maybe already fixed or file changed
+			// Try line-based replacement as fallback
+			const startLine = (vulnerability.line || 1) - 1;
+			const endLine = (vulnerability.endLine || vulnerability.line || 1) - 1;
+
+			// Check if this is a full-file replacement (generic case)
+			if (startLine === 0 && endLine >= document.lineCount - 1) {
+				// Full file replacement - use the stored full corrected code
+				await applyFix(filePath, fixedCode);
+				return;
+			}
+
+			vscode.window.showWarningMessage(
+				'Original code not found in file. The file may have been modified.'
+			);
+			return;
+		}
+
+		// Calculate the range to replace based on the found position
+		const startPos = document.positionAt(originalIndex);
+		const endPos = document.positionAt(originalIndex + originalCode.length);
 		const range = new vscode.Range(startPos, endPos);
 
-		// Replace with fixed code
-		edit.replace(document.uri, range, vulnerability.fixedCode || '');
+		// Create the edit
+		const edit = new vscode.WorkspaceEdit();
+		edit.replace(document.uri, range, fixedCode);
 
 		isPatchingInProgress = true;
 		try {

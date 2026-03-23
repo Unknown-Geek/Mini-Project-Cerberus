@@ -290,25 +290,52 @@ function extractVulnerabilities(original, corrected, filePath) {
     return []; // No changes means no vulnerabilities found
   }
 
+  const originalLines = original.split('\n');
+  const correctedLines = corrected.split('\n');
   const changes = computeLineDiff(original, corrected);
   const blocks = groupChangesIntoBlocks(changes);
 
   const vulnerabilities = [];
 
   for (const block of blocks) {
-    // Get original and corrected code for this block
-    const originalCode = block.changes
-      .filter(c => c.original)
-      .map(c => c.original)
-      .join('\n');
+    // Extract the full range of lines from the original (not just changed lines)
+    // This ensures we have the complete context for replacement
+    const startIdx = block.startLine - 1;
+    const endIdx = block.endLine;
 
+    // Get the original lines in this range
+    const originalBlockLines = originalLines.slice(startIdx, endIdx);
+    const originalCode = originalBlockLines.join('\n');
+
+    // For corrected code, we need to figure out the corresponding range
+    // Calculate the offset based on how many lines were added/removed before this block
+    let lineOffset = 0;
+    for (const change of changes) {
+      if (change.originalLine && change.originalLine < block.startLine) {
+        if (change.type === 'removed') {
+          lineOffset--;
+        }
+      }
+      if (change.correctedLine && change.correctedLine < block.startLine + lineOffset) {
+        if (change.type === 'added') {
+          lineOffset++;
+        }
+      }
+    }
+
+    // Build the corrected code from the changes in this block
     const correctedCode = block.changes
-      .filter(c => c.corrected)
+      .filter(c => c.corrected !== undefined)
       .map(c => c.corrected)
       .join('\n');
 
     // Skip if only whitespace/formatting changes
     if (originalCode.replace(/\s/g, '') === correctedCode.replace(/\s/g, '')) {
+      continue;
+    }
+
+    // Skip empty changes
+    if (!originalCode.trim() && !correctedCode.trim()) {
       continue;
     }
 
@@ -321,7 +348,7 @@ function extractVulnerabilities(original, corrected, filePath) {
     );
 
     // Build description
-    let description = `${type} vulnerability detected`;
+    let description = `${type} detected`;
     if (block.startLine === block.endLine) {
       description += ` at line ${block.startLine}`;
     } else {
