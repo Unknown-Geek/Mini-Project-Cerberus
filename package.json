@@ -15,12 +15,23 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Cerberus",
+      "properties": {
+        "cerberus.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:5000",
+          "description": "Backend server URL for Cerberus. Change this to your deployed Hugging Face Space URL (e.g., https://your-space.hf.space)",
+          "order": 0
+        }
+      }
+    },
     "commands": [
       {
         "command": "cerberus.scan",
         "title": "Scan for Vulnerabilities",
         "category": "Cerberus",
-        "icon": "$(shield)"
+        "icon": "$(search)"
       },
       {
         "command": "cerberus.fixVulnerability",

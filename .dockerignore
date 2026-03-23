@@ -1,0 +1,41 @@
+# Node modules
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Environment files (will be set in HF Spaces settings)
+.env
+.env.*
+
+# Development files
+*.md
+!README.md
+.vscode/
+.git/
+.gitignore
+.github/
+
+# Extension files (not needed for backend)
+src/
+out/
+dist/
+*.vsix
+tsconfig.json
+.eslintrc.json
+
+# Test files
+test/
+*.test.js
+coverage/
+
+# Scripts
+scripts/
+
+# Documentation
+docs/
+
+# Misc
+*.log
+.DS_Store
+tmp/
+temp/

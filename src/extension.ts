@@ -4,7 +4,13 @@ import * as path from 'path';
 import axios from 'axios';
 import { VulnerabilityTreeDataProvider, Vulnerability, VulnerabilityItem } from './vulnerabilityTree';
 
-const BACKEND_URL = 'http://localhost:5000';
+// Get backend URL from settings or use default
+function getBackendUrl(): string {
+	const config = vscode.workspace.getConfiguration('cerberus');
+	return config.get<string>('backendUrl') || 'http://localhost:5000';
+}
+
+let BACKEND_URL = getBackendUrl();
 
 // Global references
 let vulnerabilityProvider: VulnerabilityTreeDataProvider;
@@ -30,6 +36,15 @@ export function activate(context: vscode.ExtensionContext) {
 	statusBarItem.tooltip = 'Cerberus real-time security scanner';
 	statusBarItem.show();
 	context.subscriptions.push(statusBarItem);
+
+	// --- Configuration Change Listener ---
+	const configChangeListener = vscode.workspace.onDidChangeConfiguration((e) => {
+		if (e.affectsConfiguration('cerberus.backendUrl')) {
+			BACKEND_URL = getBackendUrl();
+			console.log(`Cerberus: Backend URL updated to ${BACKEND_URL}`);
+		}
+	});
+	context.subscriptions.push(configChangeListener);
 
 	// --- Tree View ---
 	vulnerabilityProvider = new VulnerabilityTreeDataProvider();
