@@ -2,7 +2,7 @@
   "nodes": [
     {
       "parameters": {
-        "model": "openai/gpt-oss-120b",
+        "model": "llama-3.3-70b-versatile",
         "options": {
           "maxTokensToSample": 4096,
           "temperature": 0
@@ -48,7 +48,7 @@
     },
     {
       "parameters": {
-        "modelName": "models/gemini-2.0-flash-lite",
+        "modelName": "models/gemini-2.5-flash-lite",
         "options": {
           "maxOutputTokens": 4096,
           "temperature": 0,
@@ -234,7 +234,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const outputData = JSON.parse(JSON.stringify($input.first().json));\n\n// Safely increment loop counter\nlet currentCount = outputData.loop_count ?? 0;\noutputData.loop_count = currentCount + 1;\n\n// Preserve original_code across the loop\nif (!outputData.original_code && outputData.code) {\n  outputData.original_code = outputData.code;\n}\n\nreturn [{\"json\": outputData}];"
+        "jsCode": "const outputData = JSON.parse(JSON.stringify($input.first().json));\n\n// Use workflow static data for loop counter because agent nodes strip all fields\nconst staticData = $getWorkflowStaticData('global');\nconst execId = ($execution && $execution.id) ? String($execution.id) : 'run_' + Date.now();\nif (!staticData.runs) staticData.runs = {};\nif (!staticData.runs[execId]) staticData.runs[execId] = {};\n\nlet currentCount = staticData.runs[execId].loop_count ?? 0;\ncurrentCount += 1;\nstaticData.runs[execId].loop_count = currentCount;\noutputData.loop_count = currentCount;\n\n// Preserve original_code across the loop\nif (!outputData.original_code && outputData.code) {\n  outputData.original_code = outputData.code;\n}\n\nreturn [{\"json\": outputData}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -481,7 +481,7 @@
     },
     {
       "parameters": {
-        "modelName": "models/gemini-2.0-flash-lite",
+        "modelName": "models/gemini-2.5-flash-lite",
         "options": {
           "maxOutputTokens": 8192,
           "temperature": 0,
@@ -505,7 +505,7 @@
     },
     {
       "parameters": {
-        "model": "openai/gpt-oss-120b",
+        "model": "moonshotai/kimi-k2-instruct",
         "options": {
           "maxTokensToSample": 8192,
           "temperature": 0
