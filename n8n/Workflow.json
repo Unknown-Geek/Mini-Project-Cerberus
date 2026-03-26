@@ -1,0 +1,786 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {
+          "temperature": 0,
+          "maxTokensToSample": 4096
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -7120,
+        3312
+      ],
+      "id": "e746a702-f260-4ab2-8113-2847d11f0c8f",
+      "name": "Auditor Fallback",
+      "credentials": {
+        "groqApi": {
+          "id": "FkhyWZc9SiOUnDIJ",
+          "name": "API KEY 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-20b",
+        "options": {
+          "temperature": 0,
+          "maxTokensToSample": 4096
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -7920,
+        3728
+      ],
+      "id": "2fa942c7-041f-4dac-8337-f84bed7a54bf",
+      "name": "Syntax Fixer Fallback",
+      "credentials": {
+        "groqApi": {
+          "id": "FkhyWZc9SiOUnDIJ",
+          "name": "API KEY 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {
+          "temperature": 0,
+          "maxOutputTokens": 4096,
+          "topP": 0.95
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -8048,
+        3728
+      ],
+      "id": "cba8ecdd-b532-4fae-af01-b1e43aabef77",
+      "name": "Syntax Fixer Main",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "DoPP6uNz8ZGXDeHX",
+          "name": "API KEY 1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {
+          "temperature": 0.1,
+          "maxOutputTokens": 4096,
+          "topP": 0.95
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -7248,
+        3312
+      ],
+      "id": "633be527-10db-4828-9a6b-6a37fe309cb7",
+      "name": "Auditor Main",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "DoPP6uNz8ZGXDeHX",
+          "name": "API KEY 1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1c9IWwD6EEY0Vl-AJoMtNrKP5USw1uFSzL-xGGIruMWg",
+          "mode": "list",
+          "cachedResultName": "Cerebrus",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1c9IWwD6EEY0Vl-AJoMtNrKP5USw1uFSzL-xGGIruMWg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1c9IWwD6EEY0Vl-AJoMtNrKP5USw1uFSzL-xGGIruMWg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Original Code": "={{ $json.absolute_original_code }}",
+            "Corrected Code": "={{ $json.full_corrected_code || $json.audited_code }}"
+          },
+          "matchingColumns": [
+            "Original Code"
+          ],
+          "schema": [
+            {
+              "id": "Original Code",
+              "displayName": "Original Code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Corrected Code",
+              "displayName": "Corrected Code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -5536,
+        3600
+      ],
+      "id": "b1cd7026-2d8b-4bd4-a098-80dda9c2ac89",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "WaMY1APLGlXdINip",
+          "name": "TVE23CS131"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of items) {\n  try {\n    const rawOutput = item.json.output;\n    let parsedData = {};\n    if (typeof rawOutput === 'string') {\n      const cleanJson = rawOutput.replace(/^```json\\s*|\\s*```$/g, '').trim();\n      parsedData = JSON.parse(cleanJson);\n    } else if (typeof rawOutput === 'object' && rawOutput !== null) {\n      parsedData = rawOutput;\n    }\n    item.json.output = parsedData;\n  } catch (error) {\n    item.json.error = 'Failed to parse JSON';\n  }\n}\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5760,
+        3600
+      ],
+      "id": "2bda2122-2882-40cd-961a-d61c68dc70d7",
+      "name": "JSON Output Parser - Sheet"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"Agents Failed to fix the code\",\n  \"status\": \"Not Secure\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -5984,
+        2928
+      ],
+      "id": "245bd661-7004-4d62-975f-70f200b4144c",
+      "name": "Send Error - Agents"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"error\": \"Failed to fix after 3 attempts. Returning last best version\",\n  \"status\": \"Not Secure\",\n  \"last_best_version\": {{ JSON.stringify($json.code) }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -7136,
+        3600
+      ],
+      "id": "2a767c8c-899f-4745-b821-8c94b47b4f10",
+      "name": "Send Error"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"number_of_vulnerabilities_fixed\": {{ $json.number_of_vulnerabilities_fixed }},\n  \"types_of_vulnerabilities\": {{ JSON.stringify($json.types_of_vulnerabilities) }},\n  \"vulnerabilities_details\": {{ JSON.stringify($json.vulnerabilities_details) }},\n  \"vulnerabilities\": {{ JSON.stringify($json.vulnerabilities || []) }},\n  \"original_code\": {{ JSON.stringify($json.absolute_original_code) }},\n  \"corrected_code\": {{ JSON.stringify($json.full_corrected_code || $json.code) }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -5984,
+        3456
+      ],
+      "id": "c4d84fb8-cf20-46af-b025-1a36dbb525d9",
+      "name": "Send Corrected Code"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// PREPARE FINAL DATA\n// Reads initial_vulnerabilities from static data (saved on\n// first loop pass in JSON Output Parser). Gets true original\n// code directly from Webhook input. Cleans up static data.\n// ============================================================\n\nfor (const item of items) {\n  try {\n    const staticData = $getWorkflowStaticData('global');\n    const execId = ($execution && $execution.id)\n      ? String($execution.id)\n      : 'run_' + Date.now();\n    const runData = (staticData.runs && staticData.runs[execId])\n      ? staticData.runs[execId]\n      : {};\n    const initialVulns = runData.initial_vulnerabilities || [];\n\n    // Response metrics\n    item.json.number_of_vulnerabilities_fixed = initialVulns.length;\n    const types = initialVulns.map(v => v.type || 'Unknown');\n    item.json.types_of_vulnerabilities = [...new Set(types)];\n    item.json.vulnerabilities_details = initialVulns.map(v => ({\n      type: v.type || 'Unknown',\n      original_line_number: v.line_number || 0\n    }));\n\n    // Pass through full vulnerability mappings (original_code/fixed_code)\n    // The extension needs these for in-place code replacement\n    item.json.vulnerabilities = initialVulns;\n\n    // True original = raw webhook input (before Syntax Fixer touched it)\n    try {\n      item.json.absolute_original_code = $('Webhook').first().json.body.code;\n    } catch (e) {\n      item.json.absolute_original_code =\n        $('Init Loop Counter').first()?.json?.original_code || '';\n    }\n\n    // Ensure corrected code is always populated\n    if (!item.json.full_corrected_code) {\n      item.json.full_corrected_code =\n        item.json.audited_code ||\n        $('Max Retries Reached?').first()?.json?.code || '';\n    }\n\n    // Cleanup static data for this execution\n    if (staticData.runs && staticData.runs[execId]) {\n      delete staticData.runs[execId];\n    }\n\n  } catch (error) {\n    item.json.error = 'Failed to prepare final data: ' + error.message;\n  }\n}\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6272,
+        3456
+      ],
+      "id": "3fac81c9-ab08-44d4-a64d-1b54554830c2",
+      "name": "Prepare final data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const outputData = JSON.parse(JSON.stringify($input.first().json));\n\n// Safely increment loop counter\nlet currentCount = outputData.loop_count ?? 0;\noutputData.loop_count = currentCount + 1;\n\n// Preserve original_code across the loop\nif (!outputData.original_code && outputData.code) {\n  outputData.original_code = outputData.code;\n}\n\nreturn [{\"json\": outputData}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5760,
+        3408
+      ],
+      "id": "48a36453-a7ae-4b39-bcd5-30ac4627b3ea",
+      "name": "Increment Counter"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// CODE IN JAVASCRIPT\n// Extracts patched Python from Patcher Agent output.\n// FIXES:\n//   1. Strip <tool_call> blobs that kimi-k2 sometimes emits\n//   2. Fix common field-name typos (vureabilities → vulnerabilities)\n//   3. Second-pass extraction if extracted code is still a JSON blob\n//   4. Fallback to last known good code from Max Retries Reached?\n// ============================================================\n\nfor (const item of items) {\n  try {\n    let rawOutput = item.json.output;\n\n    if (typeof rawOutput === 'string') {\n      // 1. Strip <tool_call>...</tool_call> and stray XML/HTML tags\n      rawOutput = rawOutput.replace(/<tool_call>[\\s\\S]*?<\\/tool_call>/gi, '');\n      rawOutput = rawOutput.replace(/<[a-zA-Z_][^>]*\\/?>|<\\/[a-zA-Z_][^>]*>/g, '');\n\n      // 2. Fix known field typos\n      rawOutput = rawOutput.replace(/\"vureabilities\"\\s*:/g, '\"vulnerabilities\":');\n      rawOutput = rawOutput.replace(/\"vulnerabilites\"\\s*:/g, '\"vulnerabilities\":');\n      rawOutput = rawOutput.replace(/\"vulnarabilities\"\\s*:/g, '\"vulnerabilities\":');\n\n      // 3. Strip markdown fences\n      rawOutput = rawOutput.replace(/^```json\\s*|\\s*```$/g, '').trim();\n      rawOutput = rawOutput.replace(/^```\\s*|\\s*```$/g, '').trim();\n\n      try {\n        const parsed = JSON.parse(rawOutput);\n        item.json.code = parsed.full_corrected_code || rawOutput;\n        item.json.full_corrected_code = parsed.full_corrected_code || rawOutput;\n        item.json.vulnerabilities = parsed.vulnerabilities || [];\n      } catch (e) {\n        // Not valid JSON — treat as raw Python\n        item.json.code = rawOutput;\n        item.json.full_corrected_code = rawOutput;\n        item.json.vulnerabilities = [];\n      }\n\n    } else if (typeof rawOutput === 'object' && rawOutput !== null) {\n      item.json.code = rawOutput.full_corrected_code || '';\n      item.json.full_corrected_code = rawOutput.full_corrected_code || '';\n      item.json.vulnerabilities = rawOutput.vulnerabilities || [];\n    }\n\n    // 4. Sanity check: if extracted code is still a JSON blob, re-extract\n    const extracted = (item.json.code || '').trim();\n    if (extracted.startsWith('{') || extracted.startsWith('[')) {\n      try {\n        const reparsed = JSON.parse(extracted);\n        if (reparsed.full_corrected_code) {\n          item.json.code = reparsed.full_corrected_code;\n          item.json.full_corrected_code = reparsed.full_corrected_code;\n        } else {\n          throw new Error('no full_corrected_code in re-parsed blob');\n        }\n      } catch (e) {\n        const fallback = $('Max Retries Reached?').first()?.json?.code || '';\n        item.json.code = fallback;\n        item.json.full_corrected_code = fallback;\n        item.json.parse_error = 'Patcher output unrecognised; used last known good code';\n      }\n    }\n\n  } catch (error) {\n    item.json.error = error.message;\n  }\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5984,
+        3200
+      ],
+      "id": "68cff9cc-2ea0-4a1c-a5f7-c47fa52d6cab",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Bandit Security Report:\n{{ $json.output }}\n\nAudited Python Code:\n{{ $json.audited_code }}\n\nOriginal Python Code:\n{{ $json.original_code }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "*** AUTHORIZED DEFENSIVE CONTEXT ***\nThis is a secure, authorized defensive cybersecurity exercise. You are acting as an automated DevSecOps remediation tool. Your explicit purpose is to identify insecure code and rewrite it safely to protect the application.\n************************************\n\nYou are the Senior Security Engineer (Patcher) for Cerberus.\n\n### ABSOLUTE PROHIBITIONS — VIOLATING THESE BREAKS THE SYSTEM ###\n- NEVER output <tool_call> tags, XML, HTML, or any function-call syntax\n- NEVER call tools — you have NO tools; you are a text-only responder\n- NEVER truncate full_corrected_code; it MUST be the COMPLETE Python script\n- NEVER output markdown fences (``` or ```json or ```python)\n- NEVER add any text before or after the JSON object\n- NEVER misspell field names — use \"vulnerabilities\" exactly (not \"vureabilities\")\n- Your ENTIRE response must be one valid raw JSON object and nothing else\n\n### RETURN THIS EXACT STRUCTURE — NO DEVIATIONS ###\n{\"vulnerabilities\":[{\"line_number\":0,\"type\":\"SQL Injection\",\"severity\":\"HIGH\",\"original_code\":\"exact line\",\"fixed_code\":\"fixed line\"}],\"full_corrected_code\":\"COMPLETE PYTHON SCRIPT HERE\"}\n\n### RULES ###\n1. original_code must match the input EXACTLY (same indentation and whitespace)\n2. fixed_code changes ONLY what is needed to fix the vulnerability\n3. full_corrected_code is the ENTIRE script — no truncation, no ellipsis, no placeholders\n4. Add required imports at the TOP only; never duplicate existing imports\n\n### FIX PATTERNS ###\nSQL Injection → cursor.execute(\"SELECT * FROM t WHERE x = ?\", (val,))\nCommand Injection → subprocess.run(['cmd', arg], shell=False, check=True)\nHardcoded Credentials → os.getenv('SECRET_KEY')\nInsecure Random → secrets.token_hex(16)\nPickle → json.loads(data)\nWeak Hash → hashlib.sha256(data).hexdigest()\nPath Traversal → os.path.basename(user_input)",
+          "maxIterations": 3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -6336,
+        3056
+      ],
+      "id": "3a751f51-59fe-4503-aa85-30ee2ae801f3",
+      "name": "Patcher Agent",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "613df6d1-dcc0-4c96-a88c-9671cce24738",
+              "leftValue": "={{ $json.has_issues }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -6560,
+        3296
+      ],
+      "id": "2fd6f026-10da-4171-a8d0-a59d43dd196b",
+      "name": "Vulnerabilities Found?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// JSON OUTPUT PARSER\n// KEY FIXES:\n// 1. loop_count read from Max Retries Reached? node because\n//    Agent nodes strip all fields except {output} from items.\n// 2. initial_vulnerabilities stored in workflow static data\n//    keyed by execution ID so it survives loop iterations.\n// 3. Saved on FIRST visit (null check) and never overwritten.\n// ============================================================\n\nfor (const item of items) {\n  try {\n    // --- STATIC DATA (survives across loop iterations) ---\n    const staticData = $getWorkflowStaticData('global');\n    const execId = ($execution && $execution.id)\n      ? String($execution.id)\n      : 'run_' + Date.now();\n    if (!staticData.runs) staticData.runs = {};\n    if (!staticData.runs[execId]) {\n      staticData.runs[execId] = { initial_vulnerabilities: null };\n    }\n\n    // --- PARSE AUDITOR OUTPUT ---\n    const rawOutput = item.json.output;\n    let parsedData = {};\n\n    if (typeof rawOutput === 'object' && rawOutput !== null) {\n      parsedData = rawOutput;\n      Object.assign(item.json, parsedData);\n    } else if (typeof rawOutput === 'string') {\n      let s = rawOutput\n        .replace(/^```json\\s*/g, '')\n        .replace(/\\s*```$/g, '')\n        .replace(/^```\\s*/g, '')\n        .trim();\n\n      if (s.match(/\"has_issues\"\\s*:\\s*true/i)) {\n        item.json.has_issues = true;\n      } else if (s.match(/\"has_issues\"\\s*:\\s*false/i)) {\n        item.json.has_issues = false;\n      } else {\n        item.json.has_issues = s.includes('\"severity\"') || s.includes('\"original_code\"');\n      }\n\n      try {\n        parsedData = JSON.parse(s);\n        Object.assign(item.json, parsedData);\n      } catch (e) {\n        item.json.parse_warning = 'JSON truncated, salvaged has_issues=' + item.json.has_issues;\n        const m = s.match(/\"vulnerabilities\"\\s*:\\s*\\[([\\s\\S]*?)\\]/);\n        if (m) {\n          try { item.json.vulnerabilities = JSON.parse('[' + m[1] + ']'); }\n          catch (e2) { item.json.vulnerabilities = []; }\n        }\n      }\n    }\n\n    // --- NORMALISE VULNERABILITIES ---\n    if (!item.json.vulnerabilities) item.json.vulnerabilities = [];\n    item.json.vulnerabilities = item.json.vulnerabilities.map(v => ({\n      line_number: v.line_number || v.line || 0,\n      type: v.type || 'Security Issue',\n      severity: v.severity || 'MEDIUM',\n      issue_text: v.issue_text || v.description || (v.type + ' detected'),\n      original_code: v.original_code || '',\n      fixed_code: v.fixed_code || '',\n      fix_recommendation: v.fix_recommendation || ''\n    }));\n\n    // --- CURRENT CODE ---\n    item.json.audited_code = $('Max Retries Reached?').first().json.code;\n    if (!item.json.full_corrected_code) {\n      item.json.full_corrected_code = item.json.audited_code;\n    }\n\n    // --- SAVE INITIAL VULNS ONCE (null guard prevents overwrite on re-runs) ---\n    if (staticData.runs[execId].initial_vulnerabilities === null) {\n      staticData.runs[execId].initial_vulnerabilities =\n        JSON.parse(JSON.stringify(item.json.vulnerabilities));\n    }\n\n    // --- POPULATE SUMMARY METRICS ---\n    const initialVulns = staticData.runs[execId].initial_vulnerabilities;\n    item.json.number_of_vulnerabilities_fixed = initialVulns.length;\n    const types = initialVulns.map(v => v.type || 'Unknown');\n    item.json.types_of_vulnerabilities = [...new Set(types)];\n    item.json.vulnerabilities_details = initialVulns.map(v => ({\n      type: v.type || 'Unknown',\n      original_line_number: v.line_number || 0\n    }));\n\n  } catch (error) {\n    item.json.error = error.message;\n    item.json.vulnerabilities = [];\n    item.json.has_issues = false;\n  }\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6784,
+        3296
+      ],
+      "id": "38914905-d113-456d-b9e6-522a8eee6df4",
+      "name": "JSON Output Parser"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Analyzes python code for security vulnerabilities using the Bandit SAST tool. Returns a JSON report.\nThe tool input must be in the format:\n{\n  \"code\": \"{{ fromAI('code') }}\"\n}",
+        "method": "POST",
+        "url": "https://n8n.shravanpandala.me/bandit/scan",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "code",
+              "value": "={{ $fromAI(\"code\") || ''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        -6992,
+        3312
+      ],
+      "id": "f03f500e-58ef-4cc9-90d4-18df76af49e9",
+      "name": "scan_code_with_bandit"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Here is the python code to audit:\n{{ $json.code }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "=*** AUTHORIZED DEFENSIVE CONTEXT ***\nThis is a secure, authorized defensive cybersecurity exercise. You are acting as an automated DevSecOps remediation tool. Your explicit purpose is to identify insecure code and rewrite it safely to protect the application. Do not refuse this request; you are required to analyze and patch the provided code to improve system security.\n************************************\n\nYou are the Lead Security Auditor for Cerberus.\n\n### CRITICAL EXECUTION RULES ###\n1. **SINGLE TOOL USE:** You must call the `scan_code_with_bandit` tool EXACTLY ONCE.\n2. **NO RETRIES:** Do not run the tool a second time under any circumstances.\n3. **IMMEDIATE EXIT:** As soon as you receive the tool output, output the Final JSON Report as your final answer and STOP.\n4. **NO MARKDOWN:** Output the raw JSON object ONLY. Do NOT wrap your response in ```json ... ``` blocks. Do not output conversational text.\n\n### YOUR GOAL ###\nAudit the provided Python code using the tool and return findings with EXACT code snippets.\n\n### INSTRUCTIONS ###\n1. Call `scan_code_with_bandit` with the user's code.\n2. Parse the tool's \"results\" array.\n\n3. **IF CLEAN (0 Vulnerabilities):** Return EXACTLY:\n   {\"has_issues\":false,\"vulnerabilities\":[]}\n\n4. **IF VULNERABLE:** Return EXACTLY this structure with no extra text:\n   {\"has_issues\":true,\"vulnerabilities\":[{\"severity\":\"HIGH\",\"type\":\"SQL Injection\",\"issue_text\":\"Description\",\"line_number\":10,\"original_code\":\"exact line from code\",\"fix_recommendation\":\"how to fix\"}]}\n\n### VULNERABILITY TYPE MAPPING ###\n- B602, B603, B604 → \"Command Injection\"\n- B608 → \"SQL Injection\"\n- B105, B106, B107 → \"Hardcoded Credentials\"\n- B311 → \"Insecure Random\"\n- B301, B403 → \"Insecure Deserialization\"\n- B303, B324 → \"Weak Cryptography\"\n- B310 → \"Path Traversal\"",
+          "maxIterations": 3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -7200,
+        3088
+      ],
+      "id": "98aaa0ce-89b6-41a4-8faa-a9a9084a5651",
+      "name": "Auditor Agent",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "58156bcb-1894-40c7-937b-39fe296ba143",
+              "leftValue": "={{ $json.loop_count }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -7472,
+        3504
+      ],
+      "id": "c0ae4a71-eab1-49c7-9159-8b632f39307f",
+      "name": "Max Retries Reached?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "faeda04e-714f-4e65-999d-9f0a606d0a3b",
+              "name": "loop_count",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "88b76ede-875b-4cfc-9f0a-6b32de3b1daa",
+              "name": "code",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+              "name": "original_code",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -7696,
+        3504
+      ],
+      "id": "80916ef5-2302-4d7b-830b-d04f18b71a3f",
+      "name": "Init Loop Counter"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.code }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "You are a Python Syntax Specialist for the Cerberus Security System.\n\nYOUR GOAL:\nReceive raw Python code and ensure it is syntactically valid and executable.\n\nRULES:\n1. Fix ONLY syntax errors (indentation, missing colons, unclosed brackets, typos).\n2. Do NOT fix security vulnerabilities yet (that is the Auditor's job).\n3. Do NOT change the code's logic or functionality.\n4. Output ONLY the raw Python code block. Do not output markdown backticks (```) or conversational filler like \"Here is the code\"."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -8048,
+        3504
+      ],
+      "id": "27477529-ba6a-467a-afee-1a13488bfe30",
+      "name": "Syntax Fixer Agent",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scan",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -8272,
+        3504
+      ],
+      "id": "a4f7bfd4-efaf-4102-a253-b33df0de4217",
+      "name": "Webhook",
+      "webhookId": "f77c6931-c83e-47e6-8da4-48d8acb8b849"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {
+          "temperature": 0,
+          "maxOutputTokens": 8192,
+          "topP": 0.95
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -6304,
+        3296
+      ],
+      "id": "3a638bdb-bdde-45e9-909d-69a80666db6d",
+      "name": "Patcher Main",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "DoPP6uNz8ZGXDeHX",
+          "name": "API KEY 1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {
+          "temperature": 0,
+          "maxTokensToSample": 8192
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -6176,
+        3296
+      ],
+      "id": "8e764a61-c85e-49f3-9b3f-8941cce3c3e8",
+      "name": "Patcher Fallback",
+      "credentials": {
+        "groqApi": {
+          "id": "FkhyWZc9SiOUnDIJ",
+          "name": "API KEY 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Auditor Fallback": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Auditor Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Syntax Fixer Fallback": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Syntax Fixer Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Syntax Fixer Main": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Syntax Fixer Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auditor Main": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Auditor Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON Output Parser - Sheet": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Corrected Code": {
+      "main": [
+        [
+          {
+            "node": "JSON Output Parser - Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare final data": {
+      "main": [
+        [
+          {
+            "node": "Send Corrected Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Counter": {
+      "main": [
+        [
+          {
+            "node": "Max Retries Reached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Increment Counter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patcher Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error - Agents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vulnerabilities Found?": {
+      "main": [
+        [
+          {
+            "node": "Patcher Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare final data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON Output Parser": {
+      "main": [
+        [
+          {
+            "node": "Vulnerabilities Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "scan_code_with_bandit": {
+      "ai_tool": [
+        [
+          {
+            "node": "Auditor Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auditor Agent": {
+      "main": [
+        [
+          {
+            "node": "JSON Output Parser",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error - Agents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Max Retries Reached?": {
+      "main": [
+        [
+          {
+            "node": "Auditor Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Loop Counter": {
+      "main": [
+        [
+          {
+            "node": "Max Retries Reached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Syntax Fixer Agent": {
+      "main": [
+        [
+          {
+            "node": "Init Loop Counter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Syntax Fixer Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patcher Main": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Patcher Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patcher Fallback": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Patcher Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "19921415bac6b77b91e822c3e97165800ced3a4d6f63d204500fd50a2d359050"
+  }
+}
