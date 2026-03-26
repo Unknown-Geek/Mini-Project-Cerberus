@@ -4,17 +4,17 @@
       "parameters": {
         "model": "openai/gpt-oss-120b",
         "options": {
-          "temperature": 0,
-          "maxTokensToSample": 4096
+          "maxTokensToSample": 4096,
+          "temperature": 0
         }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        -7120,
-        3312
+        -7792,
+        3744
       ],
-      "id": "e746a702-f260-4ab2-8113-2847d11f0c8f",
+      "id": "a415e179-4df1-4f01-a81d-548d34959c6a",
       "name": "Auditor Fallback",
       "credentials": {
         "groqApi": {
@@ -27,17 +27,17 @@
       "parameters": {
         "model": "openai/gpt-oss-20b",
         "options": {
-          "temperature": 0,
-          "maxTokensToSample": 4096
+          "maxTokensToSample": 4096,
+          "temperature": 0
         }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        -7920,
-        3728
+        -8592,
+        4160
       ],
-      "id": "2fa942c7-041f-4dac-8337-f84bed7a54bf",
+      "id": "ad5e8652-106e-40be-b64d-152fe759cabf",
       "name": "Syntax Fixer Fallback",
       "credentials": {
         "groqApi": {
@@ -48,20 +48,20 @@
     },
     {
       "parameters": {
-        "modelName": "models/gemini-2.0-flash",
+        "modelName": "models/gemini-2.0-flash-lite",
         "options": {
-          "temperature": 0,
           "maxOutputTokens": 4096,
+          "temperature": 0,
           "topP": 0.95
         }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -8048,
-        3728
+        -8720,
+        4160
       ],
-      "id": "cba8ecdd-b532-4fae-af01-b1e43aabef77",
+      "id": "d0c57abd-b1e7-4f87-8133-ed95df9c1c58",
       "name": "Syntax Fixer Main",
       "credentials": {
         "googlePalmApi": {
@@ -72,20 +72,19 @@
     },
     {
       "parameters": {
-        "modelName": "models/gemini-2.5-flash",
         "options": {
-          "temperature": 0.1,
           "maxOutputTokens": 4096,
+          "temperature": 0.1,
           "topP": 0.95
         }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -7248,
-        3312
+        -7920,
+        3744
       ],
-      "id": "633be527-10db-4828-9a6b-6a37fe309cb7",
+      "id": "8f5681e1-c54a-4849-8f6d-f30e5061bae2",
       "name": "Auditor Main",
       "credentials": {
         "googlePalmApi": {
@@ -150,10 +149,10 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        -5536,
-        3600
+        -6208,
+        4032
       ],
-      "id": "b1cd7026-2d8b-4bd4-a098-80dda9c2ac89",
+      "id": "90555d31-5112-4793-9b32-3a5351f6296e",
       "name": "Append or update row in sheet",
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -169,10 +168,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -5760,
-        3600
+        -6432,
+        4032
       ],
-      "id": "2bda2122-2882-40cd-961a-d61c68dc70d7",
+      "id": "231fa394-60b3-49f9-844e-616770150ee3",
       "name": "JSON Output Parser - Sheet"
     },
     {
@@ -184,10 +183,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        -5984,
-        2928
+        -6656,
+        3360
       ],
-      "id": "245bd661-7004-4d62-975f-70f200b4144c",
+      "id": "302df6e6-daac-49c6-bbc5-7d820a7b4216",
       "name": "Send Error - Agents"
     },
     {
@@ -199,10 +198,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        -7136,
-        3600
+        -7808,
+        4032
       ],
-      "id": "2a767c8c-899f-4745-b821-8c94b47b4f10",
+      "id": "5e0ce463-8f59-44d2-8e14-5caf22ca3e44",
       "name": "Send Error"
     },
     {
@@ -214,10 +213,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        -5984,
-        3456
+        -6656,
+        3888
       ],
-      "id": "c4d84fb8-cf20-46af-b025-1a36dbb525d9",
+      "id": "100ec6a0-d5bc-4b9e-bd2a-9905cc533605",
       "name": "Send Corrected Code"
     },
     {
@@ -227,10 +226,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -6272,
-        3456
+        -6944,
+        3888
       ],
-      "id": "3fac81c9-ab08-44d4-a64d-1b54554830c2",
+      "id": "ab92f9a7-45a2-48e4-9ff6-1f3eef5e1a41",
       "name": "Prepare final data"
     },
     {
@@ -240,10 +239,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -5760,
-        3408
+        -6432,
+        3840
       ],
-      "id": "48a36453-a7ae-4b39-bcd5-30ac4627b3ea",
+      "id": "0c3845c9-0fcd-4d69-a387-ca4360b0e142",
       "name": "Increment Counter"
     },
     {
@@ -253,10 +252,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -5984,
-        3200
+        -6656,
+        3632
       ],
-      "id": "68cff9cc-2ea0-4a1c-a5f7-c47fa52d6cab",
+      "id": "c7a9914c-9125-4cfc-9fec-7622c0d0d456",
       "name": "Code in JavaScript"
     },
     {
@@ -272,10 +271,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -6336,
-        3056
+        -7008,
+        3488
       ],
-      "id": "3a751f51-59fe-4503-aa85-30ee2ae801f3",
+      "id": "897d6b57-2679-4a87-8f77-c676c89440de",
       "name": "Patcher Agent",
       "retryOnFail": true,
       "maxTries": 3,
@@ -309,10 +308,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -6560,
-        3296
+        -7232,
+        3728
       ],
-      "id": "2fd6f026-10da-4171-a8d0-a59d43dd196b",
+      "id": "e6736934-854a-4eac-a2c6-5fe574fa1a18",
       "name": "Vulnerabilities Found?"
     },
     {
@@ -322,10 +321,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -6784,
-        3296
+        -7456,
+        3728
       ],
-      "id": "38914905-d113-456d-b9e6-522a8eee6df4",
+      "id": "7e67fd60-9892-45c6-93df-b94307fc7c6f",
       "name": "JSON Output Parser"
     },
     {
@@ -347,10 +346,10 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        -6992,
-        3312
+        -7664,
+        3744
       ],
-      "id": "f03f500e-58ef-4cc9-90d4-18df76af49e9",
+      "id": "2786948b-0ac4-41cc-8cb6-7eb9d548e127",
       "name": "scan_code_with_bandit"
     },
     {
@@ -366,10 +365,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -7200,
-        3088
+        -7872,
+        3520
       ],
-      "id": "98aaa0ce-89b6-41a4-8faa-a9a9084a5651",
+      "id": "fe875dad-68ac-4375-b842-e83e09912f3d",
       "name": "Auditor Agent",
       "retryOnFail": true,
       "waitBetweenTries": 3000,
@@ -403,10 +402,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -7472,
-        3504
+        -8144,
+        3936
       ],
-      "id": "c0ae4a71-eab1-49c7-9159-8b632f39307f",
+      "id": "1571dd68-de5b-4995-b419-eb028528c9d1",
       "name": "Max Retries Reached?"
     },
     {
@@ -438,10 +437,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -7696,
-        3504
+        -8368,
+        3936
       ],
-      "id": "80916ef5-2302-4d7b-830b-d04f18b71a3f",
+      "id": "f1da7a57-ecab-4216-bf9f-080a562372ee",
       "name": "Init Loop Counter"
     },
     {
@@ -456,10 +455,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -8048,
-        3504
+        -8720,
+        3936
       ],
-      "id": "27477529-ba6a-467a-afee-1a13488bfe30",
+      "id": "61eb2dc8-33c4-4e8d-8a2c-faed84f98815",
       "name": "Syntax Fixer Agent",
       "retryOnFail": true
     },
@@ -473,29 +472,29 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -8272,
-        3504
+        -8944,
+        3936
       ],
-      "id": "a4f7bfd4-efaf-4102-a253-b33df0de4217",
+      "id": "89c91749-a425-4728-b4ae-2d637ab448dd",
       "name": "Webhook",
       "webhookId": "f77c6931-c83e-47e6-8da4-48d8acb8b849"
     },
     {
       "parameters": {
-        "modelName": "models/gemini-2.0-flash",
+        "modelName": "models/gemini-2.0-flash-lite",
         "options": {
-          "temperature": 0,
           "maxOutputTokens": 8192,
+          "temperature": 0,
           "topP": 0.95
         }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -6304,
-        3296
+        -6976,
+        3728
       ],
-      "id": "3a638bdb-bdde-45e9-909d-69a80666db6d",
+      "id": "8d539d56-39b4-45ca-be01-df5598fbac28",
       "name": "Patcher Main",
       "credentials": {
         "googlePalmApi": {
@@ -508,17 +507,17 @@
       "parameters": {
         "model": "openai/gpt-oss-120b",
         "options": {
-          "temperature": 0,
-          "maxTokensToSample": 8192
+          "maxTokensToSample": 8192,
+          "temperature": 0
         }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        -6176,
-        3296
+        -6848,
+        3728
       ],
-      "id": "8e764a61-c85e-49f3-9b3f-8941cce3c3e8",
+      "id": "aeed557d-c848-4436-8c73-b05a98cd8f87",
       "name": "Patcher Fallback",
       "credentials": {
         "groqApi": {
