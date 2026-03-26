@@ -387,7 +387,7 @@
             {
               "id": "58156bcb-1894-40c7-937b-39fe296ba143",
               "leftValue": "={{ $json.loop_count }}",
-              "rightValue": 3,
+              "rightValue": 1,
               "operator": {
                 "type": "number",
                 "operation": "lt"
