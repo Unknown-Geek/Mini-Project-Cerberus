@@ -11,10 +11,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        -7792,
-        3744
+        -11904,
+        5492
       ],
-      "id": "a415e179-4df1-4f01-a81d-548d34959c6a",
+      "id": "ab9d679d-0a8e-49ec-a40a-268681b34f03",
       "name": "Auditor Fallback",
       "credentials": {
         "groqApi": {
@@ -34,10 +34,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        -8592,
-        4160
+        -12696,
+        5912
       ],
-      "id": "ad5e8652-106e-40be-b64d-152fe759cabf",
+      "id": "95d68673-5d4a-4076-937b-c18426e0c608",
       "name": "Syntax Fixer Fallback",
       "credentials": {
         "groqApi": {
@@ -58,10 +58,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -8720,
-        4160
+        -12824,
+        5912
       ],
-      "id": "d0c57abd-b1e7-4f87-8133-ed95df9c1c58",
+      "id": "eda458ee-4bf1-4edb-b0c2-f0c4689ed33a",
       "name": "Syntax Fixer Main",
       "credentials": {
         "googlePalmApi": {
@@ -81,10 +81,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -7920,
-        3744
+        -12032,
+        5492
       ],
-      "id": "8f5681e1-c54a-4849-8f6d-f30e5061bae2",
+      "id": "12703c5a-0a7f-4bc6-81be-dac376f0298f",
       "name": "Auditor Main",
       "credentials": {
         "googlePalmApi": {
@@ -149,10 +149,10 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        -6208,
-        4032
+        -10320,
+        5784
       ],
-      "id": "90555d31-5112-4793-9b32-3a5351f6296e",
+      "id": "503625cb-0d46-4366-b597-e1ae5eee4aad",
       "name": "Append or update row in sheet",
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -168,41 +168,11 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -6432,
-        4032
+        -10544,
+        5784
       ],
-      "id": "231fa394-60b3-49f9-844e-616770150ee3",
+      "id": "ce925a37-cc5b-4255-a2f7-f42f8cb57c64",
       "name": "JSON Output Parser - Sheet"
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "{\n  \"error\": \"Agents Failed to fix the code\",\n  \"status\": \"Not Secure\"\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5,
-      "position": [
-        -6656,
-        3360
-      ],
-      "id": "302df6e6-daac-49c6-bbc5-7d820a7b4216",
-      "name": "Send Error - Agents"
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={\n  \"error\": \"Failed to fix after 3 attempts. Returning last best version\",\n  \"status\": \"Not Secure\",\n  \"last_best_version\": {{ JSON.stringify($json.code) }}\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5,
-      "position": [
-        -7808,
-        4032
-      ],
-      "id": "5e0ce463-8f59-44d2-8e14-5caf22ca3e44",
-      "name": "Send Error"
     },
     {
       "parameters": {
@@ -213,10 +183,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        -6656,
-        3888
+        -10768,
+        5636
       ],
-      "id": "100ec6a0-d5bc-4b9e-bd2a-9905cc533605",
+      "id": "d2f0f18c-e8fb-483f-9c60-d7e62ddc6349",
       "name": "Send Corrected Code"
     },
     {
@@ -226,10 +196,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -6944,
-        3888
+        -11056,
+        5636
       ],
-      "id": "ab92f9a7-45a2-48e4-9ff6-1f3eef5e1a41",
+      "id": "0180ce1b-d5b2-4d2c-a7de-ff975c261fde",
       "name": "Prepare final data"
     },
     {
@@ -239,10 +209,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -6432,
-        3840
+        -10544,
+        5592
       ],
-      "id": "0c3845c9-0fcd-4d69-a387-ca4360b0e142",
+      "id": "c20fa160-7f1e-4142-abb1-a9bc9ff8052d",
       "name": "Increment Counter"
     },
     {
@@ -252,10 +222,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -6656,
-        3632
+        -10768,
+        5392
       ],
-      "id": "c7a9914c-9125-4cfc-9fec-7622c0d0d456",
+      "id": "176ae79e-9e45-4f79-bd9a-68c8767cbc31",
       "name": "Code in JavaScript"
     },
     {
@@ -271,10 +241,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -7008,
-        3488
+        -11120,
+        5236
       ],
-      "id": "897d6b57-2679-4a87-8f77-c676c89440de",
+      "id": "bfdd91f1-832f-4c68-8d3d-29ff2eb4cce9",
       "name": "Patcher Agent",
       "retryOnFail": true,
       "maxTries": 3,
@@ -308,10 +278,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -7232,
-        3728
+        -11344,
+        5488
       ],
-      "id": "e6736934-854a-4eac-a2c6-5fe574fa1a18",
+      "id": "43fe840f-8381-4834-960a-235021d4e615",
       "name": "Vulnerabilities Found?"
     },
     {
@@ -321,10 +291,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -7456,
-        3728
+        -11568,
+        5488
       ],
-      "id": "7e67fd60-9892-45c6-93df-b94307fc7c6f",
+      "id": "4805c4e7-defe-4e9e-ab8d-fecc72ad3b5e",
       "name": "JSON Output Parser"
     },
     {
@@ -346,10 +316,10 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        -7664,
-        3744
+        -11776,
+        5492
       ],
-      "id": "2786948b-0ac4-41cc-8cb6-7eb9d548e127",
+      "id": "54317d5b-abd2-4593-b462-c58a7bd9dbf5",
       "name": "scan_code_with_bandit"
     },
     {
@@ -365,10 +335,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -7872,
-        3520
+        -11976,
+        5268
       ],
-      "id": "fe875dad-68ac-4375-b842-e83e09912f3d",
+      "id": "21b9e64a-0130-467b-ae26-fe72d7a3a9c8",
       "name": "Auditor Agent",
       "retryOnFail": true,
       "waitBetweenTries": 3000,
@@ -402,10 +372,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -8144,
-        3936
+        -12256,
+        5688
       ],
-      "id": "1571dd68-de5b-4995-b419-eb028528c9d1",
+      "id": "fecd247c-4818-42cc-9d55-92370ceebe0f",
       "name": "Max Retries Reached?"
     },
     {
@@ -437,10 +407,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -8368,
-        3936
+        -12480,
+        5688
       ],
-      "id": "f1da7a57-ecab-4216-bf9f-080a562372ee",
+      "id": "b4a6b7ae-1aa5-436f-acef-b794a2f9ba2a",
       "name": "Init Loop Counter"
     },
     {
@@ -455,10 +425,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -8720,
-        3936
+        -12832,
+        5688
       ],
-      "id": "61eb2dc8-33c4-4e8d-8a2c-faed84f98815",
+      "id": "55caf2dc-837d-483e-8733-ce615934fa8b",
       "name": "Syntax Fixer Agent",
       "retryOnFail": true
     },
@@ -472,10 +442,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -8944,
-        3936
+        -13056,
+        5688
       ],
-      "id": "89c91749-a425-4728-b4ae-2d637ab448dd",
+      "id": "e7286c4f-7d50-4f07-a73f-389dd50bad1f",
       "name": "Webhook",
       "webhookId": "f77c6931-c83e-47e6-8da4-48d8acb8b849"
     },
@@ -491,10 +461,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -6976,
-        3728
+        -11112,
+        5460
       ],
-      "id": "8d539d56-39b4-45ca-be01-df5598fbac28",
+      "id": "83a0c524-428c-4d3b-9286-fd11ce6b1f82",
       "name": "Patcher Main",
       "credentials": {
         "googlePalmApi": {
@@ -514,10 +484,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        -6848,
-        3728
+        -10984,
+        5460
       ],
-      "id": "aeed557d-c848-4436-8c73-b05a98cd8f87",
+      "id": "f6fd2b0a-8180-4665-a035-2e40ef03e9b9",
       "name": "Patcher Fallback",
       "credentials": {
         "groqApi": {
@@ -525,6 +495,49 @@
           "name": "API KEY 2"
         }
       }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"Agents Failed to fix the code\",\n  \"status\": \"Not Secure\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -10768,
+        5120
+      ],
+      "id": "ce09cfbd-08d8-428c-8f50-0c843834a6b5",
+      "name": "Send Error - Agents"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// PREPARE FINAL DATA\n// Reads initial_vulnerabilities from static data (saved on\n// first loop pass in JSON Output Parser). Gets true original\n// code directly from Webhook input. Cleans up static data.\n// ============================================================\n\nfor (const item of items) {\n  try {\n    const staticData = $getWorkflowStaticData('global');\n    const execId = ($execution && $execution.id)\n      ? String($execution.id)\n      : 'run_' + Date.now();\n    const runData = (staticData.runs && staticData.runs[execId])\n      ? staticData.runs[execId]\n      : {};\n    const initialVulns = runData.initial_vulnerabilities || [];\n\n    // Response metrics\n    item.json.number_of_vulnerabilities_fixed = initialVulns.length;\n    const types = initialVulns.map(v => v.type || 'Unknown');\n    item.json.types_of_vulnerabilities = [...new Set(types)];\n    item.json.vulnerabilities_details = initialVulns.map(v => ({\n      type: v.type || 'Unknown',\n      original_line_number: v.line_number || 0\n    }));\n\n    // Pass through full vulnerability mappings (original_code/fixed_code)\n    // The extension needs these for in-place code replacement\n    item.json.vulnerabilities = initialVulns;\n\n    // True original = raw webhook input (before Syntax Fixer touched it)\n    try {\n      item.json.absolute_original_code = $('Webhook').first().json.body.code;\n    } catch (e) {\n      item.json.absolute_original_code =\n        $('Init Loop Counter').first()?.json?.original_code || '';\n    }\n\n    // Ensure corrected code is always populated\n    if (!item.json.full_corrected_code) {\n      item.json.full_corrected_code =\n        item.json.audited_code ||\n        $('Max Retries Reached?').first()?.json?.code || '';\n    }\n\n    // Cleanup static data for this execution\n    if (staticData.runs && staticData.runs[execId]) {\n      delete staticData.runs[execId];\n    }\n\n  } catch (error) {\n    item.json.error = 'Failed to prepare final data: ' + error.message;\n  }\n}\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -11912,
+        5784
+      ],
+      "id": "2732831e-0d6a-4186-9b31-6906ccc9677c",
+      "name": "Prepare final Data"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"message\" : \"Max tries exceeded\",\n  \"number_of_vulnerabilities_fixed\": {{ $json.number_of_vulnerabilities_fixed }},\n  \"types_of_vulnerabilities\": {{ JSON.stringify($json.types_of_vulnerabilities) }},\n  \"vulnerabilities_details\": {{ JSON.stringify($json.vulnerabilities_details) }},\n  \"vulnerabilities\": {{ JSON.stringify($json.vulnerabilities || []) }},\n  \"original_code\": {{ JSON.stringify($json.absolute_original_code) }},\n  \"corrected_code\": {{ JSON.stringify($json.full_corrected_code || $json.code) }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -11568,
+        5784
+      ],
+      "id": "1f2539a4-28b6-41c9-8200-bb8227d7378b",
+      "name": "Send Last Correct Iteration"
     }
   ],
   "connections": {
@@ -714,7 +727,7 @@
         ],
         [
           {
-            "node": "Send Error",
+            "node": "Prepare final Data",
             "type": "main",
             "index": 0
           }
@@ -772,6 +785,17 @@
             "node": "Patcher Agent",
             "type": "ai_languageModel",
             "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare final Data": {
+      "main": [
+        [
+          {
+            "node": "Send Last Correct Iteration",
+            "type": "main",
+            "index": 0
           }
         ]
       ]

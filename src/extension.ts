@@ -112,6 +112,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 			const data = response.data;
 			const vulnerabilities: Vulnerability[] = data.vulnerabilities || [];
+			const vulnTypes: string[] = data.vulnerability_types || [];
+			const vulnCount: number = data.vulnerability_count || vulnerabilities.length;
 
 			vulnerabilityProvider.setVulnerabilities(vulnerabilities);
 
@@ -119,10 +121,12 @@ export function activate(context: vscode.ExtensionContext) {
 			const errorCount = vulnerabilities.filter((v: Vulnerability) => v.status === 'error').length;
 
 			if (analyzedVulns.length > 0) {
-				// Build a summary of found issues
-				const typesSummary = [...new Set(analyzedVulns.map(v => v.type).filter(Boolean))];
+				// Use n8n vulnerability types if available, otherwise extract from vulnerabilities
+				const typesSummary = vulnTypes.length > 0
+					? vulnTypes
+					: [...new Set(analyzedVulns.map(v => v.type).filter(Boolean))];
 				const summaryText = typesSummary.length > 0
-					? `Found: ${typesSummary.join(', ')}`
+					? `Found ${vulnCount} issue(s): ${typesSummary.join(', ')}`
 					: `Found ${analyzedVulns.length} issues`;
 
 				vscode.window.showInformationMessage(
@@ -171,8 +175,8 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		// If we have specific fixed code for this vulnerability
-		if (vulnerability.fixedCode && vulnerability.originalCode && vulnerability.line) {
+		// Prefer line-based fix when we have line numbers and fixedCode
+		if (vulnerability.fixedCode && vulnerability.line) {
 			await applyIndividualFix(vulnerability);
 		} else if (vulnerability.result) {
 			// Fall back to full file replacement
@@ -193,22 +197,38 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		// Get the full corrected code from stored fix
 		const filePath = fileVulns[0].file;
-		try {
-			const response = await axios.get(`${BACKEND_URL}/api/stored-fix`, {
-				params: { path: filePath },
-				timeout: 10000
-			});
-			const { correctedCode } = response.data;
-			await applyFix(filePath, correctedCode);
-		} catch (error: any) {
-			// Fallback: use the result from the first fixable vulnerability
-			const fixableVuln = fileVulns.find(v => v.status === 'analyzed' && v.result);
-			if (fixableVuln) {
-				await applyFix(fixableVuln.file, fixableVuln.result!);
-			} else {
-				vscode.window.showErrorMessage('No fixes available for this file.');
+
+		// Prefer line-based fixes: apply each individually from bottom-to-top
+		const fixableVulns = fileVulns
+			.filter(v => v.status === 'analyzed' && v.fixedCode && v.line)
+			.sort((a, b) => (b.line || 0) - (a.line || 0)); // bottom-to-top
+
+		if (fixableVulns.length > 0) {
+			let fixedCount = 0;
+			for (const vuln of fixableVulns) {
+				const success = await applyIndividualFix(vuln, true);
+				if (success) { fixedCount++; }
+			}
+			vscode.window.showInformationMessage(
+				`✅ Cerberus: Applied ${fixedCount}/${fixableVulns.length} fixes in ${path.basename(filePath)}`
+			);
+		} else {
+			// Fallback: try stored full-file fix
+			try {
+				const response = await axios.get(`${BACKEND_URL}/api/stored-fix`, {
+					params: { path: filePath },
+					timeout: 10000
+				});
+				const { correctedCode } = response.data;
+				await applyFix(filePath, correctedCode);
+			} catch (error: any) {
+				const fixableByResult = fileVulns.find(v => v.status === 'analyzed' && v.result);
+				if (fixableByResult) {
+					await applyFix(fixableByResult.file, fixableByResult.result!);
+				} else {
+					vscode.window.showErrorMessage('No fixes available for this file.');
+				}
 			}
 		}
 	});
@@ -289,6 +309,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(scanDisposable, fixDisposable, fixFileDisposable, viewDisposable, startDisposable, stopDisposable, applyStoredFixDisposable);
+
 }
 
 // ============================
@@ -414,130 +435,120 @@ async function applyFix(filePath: string, correctedCode: string) {
 }
 
 // ============================
-// APPLY INDIVIDUAL FIX (specific vulnerability)
+// APPLY INDIVIDUAL FIX (line-number based)
 // ============================
-async function applyIndividualFix(vulnerability: Vulnerability) {
+async function applyIndividualFix(vulnerability: Vulnerability, silent: boolean = false): Promise<boolean> {
 	try {
 		const filePath = vulnerability.file;
 
 		if (!fs.existsSync(filePath)) {
-			vscode.window.showErrorMessage(`File not found: ${filePath}`);
-			return;
+			if (!silent) { vscode.window.showErrorMessage(`File not found: ${filePath}`); }
+			return false;
 		}
 
 		const document = await vscode.workspace.openTextDocument(filePath);
-		await vscode.window.showTextDocument(document);
+		if (!silent) { await vscode.window.showTextDocument(document); }
 
-		const originalCode = vulnerability.originalCode;
 		const fixedCode = vulnerability.fixedCode;
 
-		if (!originalCode || !fixedCode) {
-			vscode.window.showErrorMessage('Invalid fix data for this vulnerability.');
-			return;
+		if (!fixedCode) {
+			if (!silent) { vscode.window.showErrorMessage('No fix data for this vulnerability.'); }
+			return false;
 		}
 
-		// If original and fixed are the same, nothing to do
-		if (originalCode === fixedCode) {
-			vscode.window.showInformationMessage('This vulnerability appears to already be fixed.');
-			return;
+		// Use line numbers directly from the vulnerability data
+		const startLine = (vulnerability.line || 1) - 1; // Convert to 0-indexed
+		const endLine = (vulnerability.endLine || vulnerability.line || 1) - 1;
+
+		// Validate line numbers are within document bounds
+		if (startLine < 0 || startLine >= document.lineCount) {
+			if (!silent) {
+				vscode.window.showWarningMessage(
+					`Invalid line number ${vulnerability.line}. The file may have changed since scanning. Please re-scan.`
+				);
+			}
+			return false;
 		}
 
-		const documentText = document.getText();
+		const clampedEndLine = Math.min(endLine, document.lineCount - 1);
 
-		// Strategy 1: Try exact string match first
-		let originalIndex = documentText.indexOf(originalCode);
+		// Build the range from start of startLine to end of endLine
+		const range = new vscode.Range(
+			new vscode.Position(startLine, 0),
+			new vscode.Position(clampedEndLine, document.lineAt(clampedEndLine).text.length)
+		);
 
-		// Strategy 2: Try trimmed match (ignore leading/trailing whitespace differences)
-		if (originalIndex === -1) {
-			const trimmedOriginal = originalCode.trim();
-			const trimmedDocText = documentText;
-			// Search for trimmed version
-			const searchIndex = trimmedDocText.indexOf(trimmedOriginal);
-			if (searchIndex !== -1) {
-				// Find the actual start (include leading whitespace on the line)
-				const lineStart = trimmedDocText.lastIndexOf('\n', searchIndex) + 1;
-				originalIndex = lineStart;
-				// Adjust to use the trimmed original for replacement
+		// Check if the code at these lines looks like what we expect (sanity check)
+		if (vulnerability.originalCode) {
+			const currentCode = document.getText(range);
+			const currentTrimmed = currentCode.replace(/\s+/g, '');
+			const originalTrimmed = vulnerability.originalCode.replace(/\s+/g, '');
+
+			// If less than 50% similar after whitespace normalization, warn but still try
+			if (currentTrimmed.length > 0 && originalTrimmed.length > 0) {
+				const similarity = computeOverlap(currentTrimmed, originalTrimmed);
+				if (similarity < 0.5) {
+					if (!silent) {
+						const proceed = await vscode.window.showWarningMessage(
+							`The code at lines ${vulnerability.line}-${vulnerability.endLine || vulnerability.line} has changed since scanning. Apply fix anyway?`,
+							'Apply', 'Cancel'
+						);
+						if (proceed !== 'Apply') { return false; }
+					} else {
+						// In silent (batch) mode, skip fixes with low confidence
+						console.warn(`[FIX] Skipping fix at line ${vulnerability.line}: code has changed`);
+						return false;
+					}
+				}
 			}
 		}
 
-		// Strategy 3: Line-based replacement DISABLED
-		// This approach is unreliable because the fixedCode extraction from diffs
-		// often produces incorrect/corrupted code. Instead, guide users to Fix All.
-		if (originalIndex === -1) {
-			vscode.window.showWarningMessage(
-				`Could not locate the vulnerable code in the file. ` +
-				`The file may have changed since scanning. Please re-scan or use "Fix Entire File" instead.`
-			);
-			return;
-		}
+		// Apply the fix using line-based replacement
+		const edit = new vscode.WorkspaceEdit();
+		edit.replace(document.uri, range, fixedCode);
 
-		// If we found exact match, use it
-		if (originalIndex !== -1) {
-			const startPos = document.positionAt(originalIndex);
-			const endPos = document.positionAt(originalIndex + originalCode.length);
-			const range = new vscode.Range(startPos, endPos);
+		isPatchingInProgress = true;
+		try {
+			const success = await vscode.workspace.applyEdit(edit);
 
-			const edit = new vscode.WorkspaceEdit();
-			edit.replace(document.uri, range, fixedCode);
-
-			isPatchingInProgress = true;
-			try {
-				const success = await vscode.workspace.applyEdit(edit);
-
-				if (success) {
-					await document.save();
+			if (success) {
+				await document.save();
+				if (!silent) {
 					const vulnType = vulnerability.type || 'vulnerability';
 					vscode.window.showInformationMessage(
 						`✅ Fixed ${vulnType} at line ${vulnerability.line} in ${path.basename(filePath)}`
 					);
-				} else {
-					vscode.window.showErrorMessage('Failed to apply fix.');
 				}
-			} finally {
-				setTimeout(() => { isPatchingInProgress = false; }, 500);
+				return true;
+			} else {
+				if (!silent) { vscode.window.showErrorMessage('Failed to apply fix.'); }
+				return false;
 			}
-			return;
+		} finally {
+			setTimeout(() => { isPatchingInProgress = false; }, 500);
 		}
-
-		// No match found
-		vscode.window.showWarningMessage(
-			'Could not locate the vulnerable code. The file may have been modified.'
-		);
 	} catch (error) {
-		vscode.window.showErrorMessage(`Error applying fix: ${error}`);
+		if (!silent) { vscode.window.showErrorMessage(`Error applying fix: ${error}`); }
+		return false;
 	}
 }
-
-// ============================
-// HELPER FUNCTIONS
-// ============================
 
 /**
- * Calculate similarity between two strings (0-1 scale)
- * Uses a simple character-based comparison
+ * Compute overlap ratio between two strings (0-1)
  */
-function calculateSimilarity(str1: string, str2: string): number {
-	if (str1 === str2) return 1;
-	if (!str1 || !str2) return 0;
-
-	const longer = str1.length > str2.length ? str1 : str2;
-	const shorter = str1.length > str2.length ? str2 : str1;
-
-	if (longer.length === 0) return 1;
-
-	// Count matching characters in order
+function computeOverlap(a: string, b: string): number {
+	const longer = a.length > b.length ? a : b;
+	const shorter = a.length > b.length ? b : a;
+	if (longer.length === 0) { return 1; }
 	let matches = 0;
-	let shorterIdx = 0;
-	for (let i = 0; i < longer.length && shorterIdx < shorter.length; i++) {
-		if (longer[i] === shorter[shorterIdx]) {
-			matches++;
-			shorterIdx++;
-		}
+	let shortIdx = 0;
+	for (let i = 0; i < longer.length && shortIdx < shorter.length; i++) {
+		if (longer[i] === shorter[shortIdx]) { matches++; shortIdx++; }
 	}
-
 	return matches / longer.length;
 }
+
+
 
 // ============================
 // STATUS BAR HELPER

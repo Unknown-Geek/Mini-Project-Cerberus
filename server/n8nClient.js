@@ -51,7 +51,7 @@ function sleep(ms) {
  * @param {number} params.timeoutSeconds  - Per-attempt request timeout in seconds
  * @param {number} [params.maxRetries=2]  - How many times to retry on 5xx
  * @param {number} [params.retryDelayMs=8000] - Base delay between retries (ms)
- * @returns {Promise<string>} - The corrected code
+ * @returns {Promise<{correctedCode: string, vulnerabilities: Array}>} - The corrected code and per-vulnerability fix mappings from Patcher Agent
  */
 async function patchCodeViaN8n({ code, webhookUrl, timeoutSeconds, maxRetries = 2, retryDelayMs = 8000 }) {
   let lastError;
@@ -95,7 +95,15 @@ async function patchCodeViaN8n({ code, webhookUrl, timeoutSeconds, maxRetries = 
         throw new N8NWebhookResponseError("n8n webhook response missing 'corrected_code' string");
       }
 
-      return correctedCode; // success
+      // Return both the corrected code AND the per-vulnerability mappings
+      // from the Patcher Agent (original_code/fixed_code for each vuln)
+      return {
+        correctedCode,
+        vulnerabilities: payload.vulnerabilities || [],
+        numberOfVulnerabilitiesFixed: payload.number_of_vulnerabilities_fixed || 0,
+        typesOfVulnerabilities: payload.types_of_vulnerabilities || [],
+        vulnerabilitiesDetails: payload.vulnerabilities_details || []
+      };
 
     } catch (error) {
       if (error instanceof N8NWebhookResponseError) throw error; // not retryable

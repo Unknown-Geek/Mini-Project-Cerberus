@@ -1,0 +1,8 @@
+Bandit Security Report:
+{{ $json.output }}
+
+Audited Python Code:
+{{ $json.audited_code }}
+
+Original Python Code:
+{{ $json.original_code }}

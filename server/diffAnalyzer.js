@@ -373,7 +373,81 @@ function detectVulnerabilityType(originalCode, correctedCode, lineNumber, fullOr
  * @param {string} filePath - Path to the file
  * @returns {Array} Array of vulnerability objects
  */
-function extractVulnerabilities(original, corrected, filePath) {
+function extractVulnerabilities(original, corrected, filePath, n8nVulnerabilities = [], n8nVulnDetails = []) {
+  // ── Strategy 1: Use n8n Patcher Agent's per-vulnerability mappings ──────────
+  // The Patcher Agent returns exact original_code/fixed_code for each vulnerability.
+  // These are far more reliable than our diff-based extraction.
+  if (n8nVulnerabilities && n8nVulnerabilities.length > 0) {
+    console.log(`[DIFF] Using ${n8nVulnerabilities.length} vulnerabilities from Patcher Agent`);
+
+    const vulns = n8nVulnerabilities.map(nv => {
+      const originalCode = nv.original_code || nv.originalCode || '';
+      const fixedCode = nv.fixed_code || nv.fixedCode || '';
+      const lineNumber = nv.line_number || nv.line || 0;
+      const type = nv.type || 'Security Issue';
+      const severity = (nv.severity || 'medium').toLowerCase();
+
+      // Try to find the line number if not provided
+      let line = lineNumber;
+      if (!line && originalCode) {
+        const idx = original.indexOf(originalCode);
+        if (idx !== -1) {
+          line = original.substring(0, idx).split('\n').length;
+        }
+      }
+
+      const endLine = line + (originalCode ? originalCode.split('\n').length - 1 : 0);
+
+      return {
+        file: filePath,
+        line: line,
+        endLine: endLine,
+        type: type,
+        severity: severity,
+        description: `${type} at line ${line}`,
+        originalCode: originalCode,
+        fixedCode: fixedCode,
+        status: 'analyzed',
+        isFixed: false,
+        result: fixedCode
+      };
+    }).filter(v => v.originalCode && v.fixedCode && v.originalCode !== v.fixedCode);
+
+    if (vulns.length > 0) {
+      vulns.sort((a, b) => a.line - b.line);
+      return vulns;
+    }
+    // If n8n vulns were empty/invalid after filtering, fall through to diff-based
+    console.log('[DIFF] n8n vulnerabilities were empty after filtering, falling back to diff analysis');
+  }
+
+  // ── Build n8n type hints from available metadata ─────────────────────────────
+  // Even when per-vulnerability code is empty, n8n provides type+line metadata
+  // via vulnerabilities_details or the vulnerabilities array itself.
+  // We use this to assign correct types during diff-based detection.
+  const typeHints = [];
+  if (n8nVulnDetails && n8nVulnDetails.length > 0) {
+    n8nVulnDetails.forEach(d => {
+      typeHints.push({
+        line: d.original_line_number || d.line_number || 0,
+        type: d.type || 'Security Issue'
+      });
+    });
+  } else if (n8nVulnerabilities && n8nVulnerabilities.length > 0) {
+    // Fallback: extract type hints from vulnerabilities even if code was empty
+    n8nVulnerabilities.forEach(nv => {
+      const line = nv.line_number || nv.line || 0;
+      const type = nv.type || 'Security Issue';
+      if (line > 0) {
+        typeHints.push({ line, type });
+      }
+    });
+  }
+  if (typeHints.length > 0) {
+    console.log(`[DIFF] Using ${typeHints.length} type hints from n8n: ${typeHints.map(h => `${h.type}@L${h.line}`).join(', ')}`);
+  }
+
+  // ── Strategy 2: Diff-based extraction (fallback) ────────────────────────────
   // First, scan for vulnerability comments in the original code
   const commentVulns = scanForVulnerabilityPatterns(original, filePath);
 
@@ -501,12 +575,23 @@ function extractVulnerabilities(original, corrected, filePath) {
 
     // If no match found, create a new vulnerability from the diff
     if (!matched) {
-      const { type, severity } = detectVulnerabilityType(
-        originalCode,
-        correctedCode,
-        block.startLine,
-        original
-      );
+      // Try n8n type hints first (by line proximity), then fall back to regex detection
+      let type, severity;
+      const closestHint = findClosestTypeHint(typeHints, block.startLine, block.endLine);
+      if (closestHint) {
+        type = closestHint.type;
+        // Map n8n type to severity
+        severity = getSeverityForType(type);
+      } else {
+        const detected = detectVulnerabilityType(
+          originalCode,
+          correctedCode,
+          block.startLine,
+          original
+        );
+        type = detected.type;
+        severity = detected.severity;
+      }
 
       let description = `${type} detected`;
       if (block.startLine === block.endLine) {
@@ -556,6 +641,60 @@ function applyIndividualFix(fullCode, vulnerability) {
   return lines.join('\n');
 }
 
+
+/**
+ * Find the closest n8n type hint for a given line range
+ * @param {Array} typeHints - Array of {line, type} from n8n
+ * @param {number} startLine - Start of the diff block
+ * @param {number} endLine - End of the diff block
+ * @returns {Object|null} The closest type hint or null
+ */
+function findClosestTypeHint(typeHints, startLine, endLine) {
+  if (!typeHints || typeHints.length === 0) return null;
+
+  let closest = null;
+  let closestDistance = Infinity;
+
+  for (const hint of typeHints) {
+    // Check if the hint line falls within or near the block (±3 lines)
+    let distance;
+    if (hint.line >= startLine && hint.line <= endLine) {
+      distance = 0; // Exact overlap
+    } else if (hint.line < startLine) {
+      distance = startLine - hint.line;
+    } else {
+      distance = hint.line - endLine;
+    }
+
+    // Only match within 3 lines of the block
+    if (distance <= 3 && distance < closestDistance) {
+      closest = hint;
+      closestDistance = distance;
+    }
+  }
+
+  return closest;
+}
+
+/**
+ * Map n8n vulnerability type to severity level
+ */
+function getSeverityForType(type) {
+  const severityMap = {
+    'SQL Injection': 'critical',
+    'Command Injection': 'critical',
+    'Insecure Deserialization': 'critical',
+    'Hardcoded Credentials': 'high',
+    'Path Traversal': 'high',
+    'XSS (Cross-Site Scripting)': 'high',
+    'Debug Mode Enabled': 'medium',
+    'Insecure Random': 'medium',
+    'Missing Input Validation': 'medium',
+    'Weak Cryptography': 'high'
+  };
+  return severityMap[type] || 'medium';
+}
+
 module.exports = {
   extractVulnerabilities,
   applyIndividualFix,
@@ -563,5 +702,7 @@ module.exports = {
   computeLineDiff,
   groupChangesIntoBlocks,
   detectVulnerabilityType,
+  findClosestTypeHint,
+  getSeverityForType,
   VULNERABILITY_PATTERNS
 };

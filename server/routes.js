@@ -95,7 +95,7 @@ router.post('/api/patch-code', async (req, res) => {
   console.log(`Processing patch request code_length=${code.length}`);
 
   try {
-    const correctedCode = await patchCodeViaN8n({
+    const { correctedCode } = await patchCodeViaN8n({
       code,
       webhookUrl: process.env.N8N_WEBHOOK_URL,
       timeoutSeconds: parseFloat(process.env.N8N_TIMEOUT_SECONDS || '20')
@@ -157,7 +157,7 @@ router.post('/api/patch-snippet', snippetLimiter, async (req, res) => {
   console.log(`[SNIPPET] Patching ${path.basename(filePath || 'unknown')} lines ${startLine}-${endLine} (${snippet.length} chars)`);
 
   try {
-    const patchedSnippet = await patchCodeViaN8n({
+    const { correctedCode: patchedSnippet } = await patchCodeViaN8n({
       code: snippet,
       webhookUrl: process.env.N8N_WEBHOOK_URL,
       timeoutSeconds: parseFloat(process.env.N8N_TIMEOUT_SECONDS || '120')
@@ -546,13 +546,13 @@ async function scanFileCode(code, filePath) {
 
   // For small files, send the whole thing
   if (code.length <= MAX_CHUNK_CHARS) {
-    let result = await patchCodeViaN8n({ code, webhookUrl, timeoutSeconds });
+    let { correctedCode: result, vulnerabilities: n8nVulns, typesOfVulnerabilities, numberOfVulnerabilitiesFixed, vulnerabilitiesDetails } = await patchCodeViaN8n({ code, webhookUrl, timeoutSeconds });
     result = stripMarkdownFences(result);
     if (isBogusResponse(code, result)) {
       console.warn(`[SCAN] Single-call response looks bogus, keeping original`);
-      return code;
+      return { correctedCode: code, n8nVulnerabilities: [], vulnerabilityTypes: [], vulnerabilityCount: 0, vulnerabilitiesDetails: [] };
     }
-    return result;
+    return { correctedCode: result, n8nVulnerabilities: n8nVulns || [], vulnerabilityTypes: typesOfVulnerabilities || [], vulnerabilityCount: numberOfVulnerabilitiesFixed || 0, vulnerabilitiesDetails: vulnerabilitiesDetails || [] };
   }
 
   // Parse code into logical blocks (functions, classes, imports, etc.)
@@ -577,7 +577,7 @@ async function scanFileCode(code, filePath) {
     console.log(`[SCAN] Processing chunk ${i + 1}/${chunks.length}: ${blockNames} (${chunk.code.length} chars)`);
 
     try {
-      let corrected = await patchCodeViaN8n({
+      let { correctedCode: corrected } = await patchCodeViaN8n({
         code: chunk.code,
         webhookUrl,
         timeoutSeconds
@@ -596,11 +596,10 @@ async function scanFileCode(code, filePath) {
     }
   }
 
-  // Reassemble the corrected code
-  const correctedCode = correctedChunks.join('\n\n');
-
-  // Clean up any duplicate blank lines
-  return correctedCode.replace(/\n{3,}/g, '\n\n');
+  // Reassemble the corrected code and clean up duplicate blank lines
+  const correctedCode = correctedChunks.join('\n\n').replace(/\n{3,}/g, '\n\n');
+  // For chunked processing, we don't have per-vulnerability mappings
+  return { correctedCode, n8nVulnerabilities: [], vulnerabilityTypes: [], vulnerabilityCount: 0, vulnerabilitiesDetails: [] };
 }
 
 // ── Temp result store ────────────────────────────────────────────────────────
@@ -674,10 +673,11 @@ router.post('/api/scan-file', async (req, res) => {
   console.log(`Scanning single file: ${filePath} (${code.length} chars)`);
 
   try {
-    const correctedCode = await scanFileCode(code, filePath);
+    const { correctedCode, n8nVulnerabilities, vulnerabilityTypes, vulnerabilityCount, vulnerabilitiesDetails } = await scanFileCode(code, filePath);
 
     // Extract individual vulnerabilities by comparing original and corrected code
-    const vulnerabilities = extractVulnerabilities(code, correctedCode, filePath);
+    // Pass n8n's per-vulnerability mappings and type details for accurate labeling
+    const vulnerabilities = extractVulnerabilities(code, correctedCode, filePath, n8nVulnerabilities, vulnerabilitiesDetails);
 
     // If no individual vulnerabilities found but code changed, create a generic one
     if (vulnerabilities.length === 0 && code !== correctedCode) {
@@ -715,7 +715,9 @@ router.post('/api/scan-file', async (req, res) => {
     res.json({
       files_scanned: 1,
       vulnerabilities,
-      full_corrected_code: correctedCode
+      full_corrected_code: correctedCode,
+      vulnerability_types: vulnerabilityTypes || [],
+      vulnerability_count: vulnerabilityCount || vulnerabilities.length
     });
   } catch (error) {
     console.error(`❌ Error analyzing file ${filePath}:`, error.message);
