@@ -51,7 +51,7 @@ function sleep(ms) {
  * @param {number} params.timeoutSeconds  - Per-attempt request timeout in seconds
  * @param {number} [params.maxRetries=2]  - How many times to retry on 5xx
  * @param {number} [params.retryDelayMs=8000] - Base delay between retries (ms)
- * @returns {Promise<{correctedCode: string, vulnerabilities: Array}>} - The corrected code and per-vulnerability fix mappings from Patcher Agent
+ * @returns {Promise<Object>} The full n8n response payload
  */
 async function patchCodeViaN8n({ code, webhookUrl, timeoutSeconds, maxRetries = 2, retryDelayMs = 8000 }) {
   let lastError;
@@ -65,7 +65,6 @@ async function patchCodeViaN8n({ code, webhookUrl, timeoutSeconds, maxRetries = 
 
     try {
       console.log(`[DEBUG] Sending code to n8n (length: ${code.length} chars, attempt ${attempt + 1})`);
-      console.log(`[DEBUG] First 100 chars: ${code.substring(0, 100).replace(/\n/g, '\\n')}...`);
 
       const response = await axios.post(
         webhookUrl,
@@ -77,28 +76,38 @@ async function patchCodeViaN8n({ code, webhookUrl, timeoutSeconds, maxRetries = 
       );
 
       console.log(`[DEBUG] n8n response status: ${response.status}`);
-      console.log(`[DEBUG] Response preview: ${JSON.stringify(response.data).substring(0, 100)}...`);
 
       if (response.status >= 500) {
-        // Retryable — 504 Gateway Timeout, 502 Bad Gateway, 503 Unavailable
         lastError = new N8NWebhookUpstreamError(`n8n webhook returned server error ${response.status}`);
-        continue; // go to next attempt
+        continue;
       }
       if (response.status >= 400) {
         throw new N8NWebhookUpstreamError(`n8n webhook returned unexpected status ${response.status}`);
       }
 
       const payload = response.data;
-      const correctedCode = payload.corrected_code;
+      const correctedCode = payload.corrected_code || payload.last_best_version;
 
       if (typeof correctedCode !== 'string') {
+        // Agent failure — return original code unchanged
+        if (payload.error || payload.status === 'Not Secure') {
+          console.warn(`[n8n] Agent failure response: ${payload.error || 'unknown'}, returning original code`);
+          return {
+            correctedCode: code,
+            originalCode: code,
+            vulnerabilities: [],
+            numberOfVulnerabilitiesFixed: 0,
+            typesOfVulnerabilities: [],
+            vulnerabilitiesDetails: []
+          };
+        }
         throw new N8NWebhookResponseError("n8n webhook response missing 'corrected_code' string");
       }
 
-      // Return both the corrected code AND the per-vulnerability mappings
-      // from the Patcher Agent (original_code/fixed_code for each vuln)
+      // Return the complete n8n payload in a normalized shape
       return {
         correctedCode,
+        originalCode: payload.original_code || code,
         vulnerabilities: payload.vulnerabilities || [],
         numberOfVulnerabilitiesFixed: payload.number_of_vulnerabilities_fixed || 0,
         typesOfVulnerabilities: payload.types_of_vulnerabilities || [],
@@ -106,7 +115,7 @@ async function patchCodeViaN8n({ code, webhookUrl, timeoutSeconds, maxRetries = 
       };
 
     } catch (error) {
-      if (error instanceof N8NWebhookResponseError) throw error; // not retryable
+      if (error instanceof N8NWebhookResponseError) throw error;
 
       if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
         lastError = new N8NWebhookTimeoutError('n8n webhook request timed out');
@@ -119,11 +128,9 @@ async function patchCodeViaN8n({ code, webhookUrl, timeoutSeconds, maxRetries = 
       } else {
         lastError = new N8NWebhookUpstreamError(`Failed to call n8n webhook: ${error.message}`);
       }
-      // fall through to next attempt
     }
   }
 
-  // All attempts exhausted
   throw lastError;
 }
 
