@@ -24,6 +24,16 @@ const {
 
 const router = express.Router();
 
+// Root route for HF Spaces health display
+router.get('/', (req, res) => {
+  res.json({
+    name: 'Cerberus Security Scanner',
+    status: 'running',
+    version: '0.0.1',
+    endpoints: ['/api/health', '/api/scan-file', '/api/scan-folder']
+  });
+});
+
 // Rate limiting for scan endpoint (10 requests per 15 minutes per IP)
 const scanLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
