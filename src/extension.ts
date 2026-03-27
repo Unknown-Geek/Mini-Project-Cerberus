@@ -107,7 +107,7 @@ export function activate(context: vscode.ExtensionContext) {
 				path: filePath,
 				code: code
 			}, {
-				timeout: 60000
+				timeout: 180000
 			});
 
 			const data = response.data;
