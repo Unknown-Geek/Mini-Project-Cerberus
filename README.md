@@ -1,3 +1,13 @@
+---
+title: Cerberus
+emoji: 🐕
+colorFrom: red
+colorTo: gray
+sdk: docker
+app_port: 5000
+pinned: false
+---
+
 <div align="center">
   <img src="https://img.shields.io/badge/Security-Co--Pilot-red?style=for-the-badge&logo=shield" alt="Security Co-Pilot" />
   <img src="https://img.shields.io/badge/VS%20Code-Extension-blue?style=for-the-badge&logo=visual-studio-code" alt="VS Code Extension" />
