@@ -16,6 +16,10 @@ let BACKEND_URL = getBackendUrl();
 let vulnerabilityProvider: VulnerabilityTreeDataProvider;
 let statusBarItem: vscode.StatusBarItem;
 
+// Debounce timers per file URI
+const debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+const DEBOUNCE_MS = 2000;
+
 // Guard: prevent re-entrant patching while we're applying a fix
 let isPatchingInProgress = false;
 
@@ -48,6 +52,38 @@ export function activate(context: vscode.ExtensionContext) {
 		treeDataProvider: vulnerabilityProvider,
 		showCollapseAll: true,
 	});
+
+	// ============================
+	// REAL-TIME LISTENER (Typing Analysis)
+	// ============================
+	const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
+		const doc = event.document;
+
+		if (!realTimeEnabled) { return; }
+		if (doc.languageId !== 'python') { return; }
+		if (doc.uri.scheme !== 'file') { return; }
+		if (isPatchingInProgress) { return; }
+		if (event.contentChanges.length === 0) { return; }
+
+		const fileKey = doc.uri.toString();
+
+		// Clear previous debounce
+		if (debounceTimers.has(fileKey)) {
+			clearTimeout(debounceTimers.get(fileKey)!);
+		}
+
+		// Set new debounce to trigger scan instead of auto-patching
+		debounceTimers.set(fileKey, setTimeout(() => {
+			debounceTimers.delete(fileKey);
+			
+			// If it's the active document, trigger the scan command
+			const activeEditor = vscode.window.activeTextEditor;
+			if (activeEditor && activeEditor.document.uri.toString() === doc.uri.toString()) {
+				vscode.commands.executeCommand('cerberus.scan');
+			}
+		}, DEBOUNCE_MS));
+	});
+	context.subscriptions.push(changeListener);
 
 
 
@@ -232,6 +268,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const stopDisposable = vscode.commands.registerCommand('cerberus.stopRealTime', () => {
 		realTimeEnabled = false;
+		// Clear any pending debounce timers
+		for (const timer of debounceTimers.values()) {
+			clearTimeout(timer);
+		}
+		debounceTimers.clear();
 		statusBarItem.text = '$(shield) Cerberus: Stopped';
 		vscode.window.showInformationMessage('🔴 Cerberus: Real-time scanning stopped.');
 	});
@@ -592,4 +633,9 @@ function setStatus(state: 'idle' | 'scanning' | 'patched' | 'error', fileName?: 
 }
 
 export function deactivate() {
+	// Clear all pending debounce timers
+	for (const timer of debounceTimers.values()) {
+		clearTimeout(timer);
+	}
+	debounceTimers.clear();
 }
