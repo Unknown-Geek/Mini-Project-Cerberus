@@ -455,6 +455,13 @@ async function applyFix(filePath: string, correctedCode: string, vulnerability?:
 				vulnerability.status = 'fixed';
 				vulnerabilityProvider.refresh();
 			}
+
+			const editor = await vscode.window.showTextDocument(document);
+			if (vulnerability && vulnerability.line) {
+				const lineIdx = Math.max(0, vulnerability.line - 1);
+				editor.revealRange(new vscode.Range(lineIdx, 0, lineIdx, 0), vscode.TextEditorRevealType.InCenter);
+			}
+
 			vscode.window.showInformationMessage(`✅ Fix applied and saved: ${path.basename(filePath)}`);
 		} else {
 			vscode.window.showErrorMessage('Failed to apply fix.');
@@ -642,6 +649,9 @@ async function applyIndividualFix(vulnerability: Vulnerability, silent: boolean 
 				vulnerability.status = 'fixed';
 				vulnerabilityProvider.refresh();
 				if (!silent) {
+					const editor = await vscode.window.showTextDocument(document);
+					editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+
 					const vulnType = vulnerability.type || 'vulnerability';
 					vscode.window.showInformationMessage(
 						`✅ Fixed ${vulnType} at line ${vulnerability.line} in ${path.basename(filePath)}`
