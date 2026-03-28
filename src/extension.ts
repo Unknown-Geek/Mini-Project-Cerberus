@@ -16,10 +16,6 @@ let BACKEND_URL = getBackendUrl();
 let vulnerabilityProvider: VulnerabilityTreeDataProvider;
 let statusBarItem: vscode.StatusBarItem;
 
-// Debounce timers per file URI
-const debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-const DEBOUNCE_MS = 2000;
-
 // Guard: prevent re-entrant patching while we're applying a fix
 let isPatchingInProgress = false;
 
@@ -53,37 +49,7 @@ export function activate(context: vscode.ExtensionContext) {
 		showCollapseAll: true,
 	});
 
-	// ============================
-	// REAL-TIME LISTENER
-	// ============================
-	const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
-		const doc = event.document;
 
-		// Check if real-time scanning is enabled
-		if (!realTimeEnabled) { return; }
-		// Only trigger for Python files
-		if (doc.languageId !== 'python') { return; }
-		// Skip untitled / dirty-from-us files
-		if (doc.uri.scheme !== 'file') { return; }
-		// Skip if we are currently applying a patch
-		if (isPatchingInProgress) { return; }
-		// Skip if no actual content changes
-		if (event.contentChanges.length === 0) { return; }
-
-		const fileKey = doc.uri.toString();
-
-		// Clear previous debounce for this file
-		if (debounceTimers.has(fileKey)) {
-			clearTimeout(debounceTimers.get(fileKey)!);
-		}
-
-		// Set new debounce
-		debounceTimers.set(fileKey, setTimeout(() => {
-			debounceTimers.delete(fileKey);
-			handleRealTimePatch(doc, event.contentChanges);
-		}, DEBOUNCE_MS));
-	});
-	context.subscriptions.push(changeListener);
 
 	// ============================
 	// AUTO-SCAN ON SAVE
@@ -266,11 +232,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const stopDisposable = vscode.commands.registerCommand('cerberus.stopRealTime', () => {
 		realTimeEnabled = false;
-		// Clear any pending debounce timers
-		for (const timer of debounceTimers.values()) {
-			clearTimeout(timer);
-		}
-		debounceTimers.clear();
 		statusBarItem.text = '$(shield) Cerberus: Stopped';
 		vscode.window.showInformationMessage('🔴 Cerberus: Real-time scanning stopped.');
 	});
@@ -359,94 +320,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 }
 
-// ============================
-// REAL-TIME PATCH HANDLER
-// ============================
-async function handleRealTimePatch(
-	doc: vscode.TextDocument,
-	contentChanges: readonly vscode.TextDocumentContentChangeEvent[]
-) {
-	// Determine the range of changed lines
-	let minLine = Infinity;
-	let maxLine = -Infinity;
-	for (const change of contentChanges) {
-		minLine = Math.min(minLine, change.range.start.line);
-		// Account for inserted lines
-		const newLineCount = change.text.split('\n').length - 1;
-		const endLine = change.range.start.line + newLineCount;
-		maxLine = Math.max(maxLine, endLine, change.range.end.line);
-	}
 
-	// Expand by context lines (5 above and below)
-	const contextLines = 5;
-	const startLine = Math.max(0, minLine - contextLines);
-	const endLine = Math.min(doc.lineCount - 1, maxLine + contextLines);
-
-	// Extract snippet
-	const snippetRange = new vscode.Range(startLine, 0, endLine, doc.lineAt(endLine).text.length);
-	const snippet = doc.getText(snippetRange);
-
-	// Skip tiny snippets (less than 3 actual non-empty lines)
-	const nonEmptyLines = snippet.split('\n').filter(l => l.trim().length > 0).length;
-	if (nonEmptyLines < 3) { return; }
-
-	const filePath = doc.uri.fsPath;
-	const fileName = path.basename(filePath);
-
-	setStatus('scanning', fileName);
-
-	try {
-		const response = await axios.post(`${BACKEND_URL}/api/patch-snippet`, {
-			snippet,
-			filePath,
-			startLine,
-			endLine,
-			fullFileContext: doc.getText() // included for future use
-		}, {
-			timeout: 130000
-		});
-
-		const data = response.data;
-
-		if (data.has_changes && data.patched_snippet && data.patched_snippet !== snippet) {
-			// Apply the patched snippet back to the editor
-			isPatchingInProgress = true;
-
-			try {
-				const edit = new vscode.WorkspaceEdit();
-				// Re-read the document to get the current state (it may have changed during the request)
-				const currentDoc = vscode.workspace.textDocuments.find(d => d.uri.toString() === doc.uri.toString());
-				if (!currentDoc) { return; }
-
-				const currentSnippetRange = new vscode.Range(
-					startLine, 0,
-					Math.min(endLine, currentDoc.lineCount - 1),
-					currentDoc.lineAt(Math.min(endLine, currentDoc.lineCount - 1)).text.length
-				);
-
-				edit.replace(currentDoc.uri, currentSnippetRange, data.patched_snippet);
-				const success = await vscode.workspace.applyEdit(edit);
-
-				if (success) {
-					setStatus('patched', fileName);
-					// Reset to idle after 3 seconds
-					setTimeout(() => setStatus('idle'), 3000);
-				} else {
-					setStatus('idle');
-				}
-			} finally {
-				// Small delay before re-enabling to avoid retriggering on our own edit
-				setTimeout(() => { isPatchingInProgress = false; }, 500);
-			}
-		} else {
-			setStatus('idle');
-		}
-	} catch (error: any) {
-		// Silently fail for real-time — don't spam the user
-		console.error('Real-time patch error:', error.message);
-		setStatus('idle');
-	}
-}
 
 // ============================
 // APPLY FIX (full file replace)
@@ -718,9 +592,4 @@ function setStatus(state: 'idle' | 'scanning' | 'patched' | 'error', fileName?: 
 }
 
 export function deactivate() {
-	// Clear all pending debounce timers
-	for (const timer of debounceTimers.values()) {
-		clearTimeout(timer);
-	}
-	debounceTimers.clear();
 }
