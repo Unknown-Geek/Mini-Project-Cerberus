@@ -80,7 +80,7 @@ router.post('/api/patch-code', async (req, res) => {
   try {
     const result = await patchCodeViaN8n({
       code,
-      webhookUrl: process.env.N8N_WEBHOOK_URL,
+      webhookUrl: process.env.N8N_WEBHOOK_URL || 'https://n8n.shravanpandala.me/webhook/scan',
       timeoutSeconds: parseFloat(process.env.N8N_TIMEOUT_SECONDS || '120')
     });
 
@@ -147,7 +147,7 @@ router.post('/api/patch-snippet', snippetLimiter, async (req, res) => {
   try {
     const result = await patchCodeViaN8n({
       code: snippet,
-      webhookUrl: process.env.N8N_WEBHOOK_URL,
+      webhookUrl: process.env.N8N_WEBHOOK_URL || 'https://n8n.shravanpandala.me/webhook/scan',
       timeoutSeconds: parseFloat(process.env.N8N_TIMEOUT_SECONDS || '120')
     });
 
@@ -235,7 +235,7 @@ router.post('/api/scan', scanLimiter, async (req, res) => {
       try {
         const result = await patchCodeViaN8n({
           code,
-          webhookUrl: process.env.N8N_WEBHOOK_URL,
+          webhookUrl: process.env.N8N_WEBHOOK_URL || 'https://n8n.shravanpandala.me/webhook/scan',
           timeoutSeconds: parseFloat(process.env.N8N_TIMEOUT_SECONDS || '120')
         });
 
@@ -345,7 +345,7 @@ router.post('/api/scan-file', async (req, res) => {
   try {
     const n8nResult = await patchCodeViaN8n({
       code,
-      webhookUrl: process.env.N8N_WEBHOOK_URL,
+      webhookUrl: process.env.N8N_WEBHOOK_URL || 'https://n8n.shravanpandala.me/webhook/scan',
       timeoutSeconds: parseFloat(process.env.N8N_TIMEOUT_SECONDS || '120')
     });
 
