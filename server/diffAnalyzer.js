@@ -61,10 +61,44 @@ function extractVulnerabilities(original, corrected, filePath, n8nVulnerabilitie
       // Resolve line number from code if not provided
       let line = lineNumber;
       if (!line && originalCode) {
-        const idx = original.indexOf(originalCode.trim());
-        if (idx !== -1) {
-          line = original.substring(0, idx).split('\n').length;
+        // Find the line by matching the trimmed code content line-by-line
+        const originalLines = original.split('\n');
+        const searchLines = originalCode.trim().split('\n');
+        
+        // Try to find exact match first
+        for (let i = 0; i <= originalLines.length - searchLines.length; i++) {
+          let match = true;
+          for (let j = 0; j < searchLines.length; j++) {
+            if (originalLines[i + j].trim() !== searchLines[j].trim()) {
+              match = false;
+              break;
+            }
+          }
+          if (match) {
+            line = i + 1; // Convert to 1-indexed
+            break;
+          }
         }
+        
+        // If no exact match, try finding by the first significant line
+        if (!line && searchLines.length > 0) {
+          const firstSignificantLine = searchLines[0].trim();
+          if (firstSignificantLine) {
+            for (let i = 0; i < originalLines.length; i++) {
+              if (originalLines[i].trim() === firstSignificantLine) {
+                line = i + 1; // Convert to 1-indexed
+                console.warn(`[DIFF] Used fuzzy match for line number: ${line}`);
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Validate line number
+      if (!line || line < 1) {
+        console.error(`[DIFF] Invalid line number: ${line} for type: ${type}`);
+        line = 1; // Fallback to line 1
       }
 
       const endLine = line + (originalCode ? originalCode.split('\n').length - 1 : 0);

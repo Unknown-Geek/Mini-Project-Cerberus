@@ -457,8 +457,74 @@ async function applyIndividualFix(vulnerability: Vulnerability, silent: boolean 
 		}
 
 		// Use line numbers directly from the vulnerability data
-		const startLine = (vulnerability.line || 1) - 1; // Convert to 0-indexed
-		const endLine = (vulnerability.endLine || vulnerability.line || 1) - 1;
+		let startLine = (vulnerability.line || 1) - 1; // Convert to 0-indexed
+		let endLine = (vulnerability.endLine || vulnerability.line || 1) - 1;
+
+		// Additional validation: if we have originalCode, try to find the exact location
+		if (vulnerability.originalCode && startLine >= 0 && startLine < document.lineCount) {
+			const expectedLines = vulnerability.originalCode.split('\n').map(l => l.trim());
+			const actualLines: string[] = [];
+			
+			for (let i = startLine; i <= Math.min(endLine, document.lineCount - 1); i++) {
+				actualLines.push(document.lineAt(i).text.trim());
+			}
+
+			// Check if lines match
+			let matches = true;
+			if (expectedLines.length === actualLines.length) {
+				for (let i = 0; i < expectedLines.length; i++) {
+					if (expectedLines[i] !== actualLines[i]) {
+						matches = false;
+						break;
+					}
+				}
+			} else {
+				matches = false;
+			}
+
+			// If no match, try to find the correct location
+			if (!matches) {
+				console.warn(`[FIX] Line mismatch at ${startLine + 1}, searching for correct location...`);
+				let found = false;
+				
+				// Search in a window around the expected line
+				const searchRadius = 10;
+				const searchStart = Math.max(0, startLine - searchRadius);
+				const searchEnd = Math.min(document.lineCount - expectedLines.length, startLine + searchRadius);
+				
+				for (let searchLine = searchStart; searchLine <= searchEnd; searchLine++) {
+					let searchMatches = true;
+					for (let i = 0; i < expectedLines.length; i++) {
+						if (searchLine + i >= document.lineCount || 
+							document.lineAt(searchLine + i).text.trim() !== expectedLines[i]) {
+							searchMatches = false;
+							break;
+						}
+					}
+					
+					if (searchMatches) {
+						console.log(`[FIX] Found correct location at line ${searchLine + 1} (was ${startLine + 1})`);
+						startLine = searchLine;
+						endLine = searchLine + expectedLines.length - 1;
+						found = true;
+						break;
+					}
+				}
+				
+				if (!found && !silent) {
+					const proceed = await vscode.window.showWarningMessage(
+						`Could not find exact code match near line ${vulnerability.line}. The file may have changed. Apply fix anyway?`,
+						'Apply at original line', 'Cancel'
+					);
+					if (proceed !== 'Apply at original line') { 
+						return false; 
+					}
+				} else if (!found) {
+					console.error(`[FIX] Could not locate code for fix at line ${vulnerability.line}`);
+					return false;
+				}
+			}
+		}
 
 		// Validate line numbers are within document bounds
 		if (startLine < 0 || startLine >= document.lineCount) {
@@ -503,9 +569,39 @@ async function applyIndividualFix(vulnerability: Vulnerability, silent: boolean 
 			}
 		}
 
+		// Preserve indentation: detect the base indentation from the first line
+		const firstLineText = document.lineAt(startLine).text;
+		const baseIndent = firstLineText.match(/^(\s*)/)?.[1] || '';
+		
+		// Apply base indentation to each line of the fixed code
+		const fixedCodeLines = fixedCode.split('\n');
+		const indentedFixedCode = fixedCodeLines.map((line, index) => {
+			// Skip empty lines
+			if (line.trim() === '') { return line; }
+			
+			// For the first line, detect if it already has indentation
+			if (index === 0) {
+				const fixedLineIndent = line.match(/^(\s*)/)?.[1] || '';
+				// If fixed code has no indentation, add base indent
+				if (fixedLineIndent === '') {
+					return baseIndent + line;
+				}
+				// If fixed code has indentation, preserve it (it might be relative)
+				return line;
+			}
+			
+			// For subsequent lines, detect relative indentation
+			const fixedLineIndent = line.match(/^(\s*)/)?.[1] || '';
+			const firstFixedLineIndent = fixedCodeLines[0].match(/^(\s*)/)?.[1] || '';
+			
+			// Calculate relative indentation from the first fixed line
+			const relativeIndent = fixedLineIndent.slice(firstFixedLineIndent.length);
+			return baseIndent + relativeIndent + line.trim();
+		}).join('\n');
+
 		// Apply the fix using line-based replacement
 		const edit = new vscode.WorkspaceEdit();
-		edit.replace(document.uri, range, fixedCode);
+		edit.replace(document.uri, range, indentedFixedCode);
 
 		isPatchingInProgress = true;
 		try {
