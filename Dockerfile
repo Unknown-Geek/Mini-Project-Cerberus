@@ -15,6 +15,8 @@ COPY server/ ./server/
 
 # Hugging Face Spaces uses port 7860 by default
 ENV PORT=7860
+ENV N8N_WEBHOOK_URL=https://n8n.shravanpandala.me/webhook/scan
+ENV N8N_TIMEOUT_SECONDS=120
 
 # Expose the port
 EXPOSE 7860
