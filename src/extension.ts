@@ -86,6 +86,24 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(changeListener);
 
 	// ============================
+	// AUTO-SCAN ON SAVE
+	// ============================
+	const saveListener = vscode.workspace.onDidSaveTextDocument((doc) => {
+		// Only trigger for Python files and actual files on disk
+		if (doc.languageId === 'python' && doc.uri.scheme === 'file') {
+			// Check if real-time scanning is enabled
+			if (!realTimeEnabled) { return; }
+			
+			// If it's the active document, we can run the scan command directly
+			const activeEditor = vscode.window.activeTextEditor;
+			if (activeEditor && activeEditor.document.uri.toString() === doc.uri.toString()) {
+				vscode.commands.executeCommand('cerberus.scan');
+			}
+		}
+	});
+	context.subscriptions.push(saveListener);
+
+	// ============================
 	// MANUAL SCAN COMMAND
 	// ============================
 	const scanDisposable = vscode.commands.registerCommand('cerberus.scan', async () => {
@@ -308,7 +326,36 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	context.subscriptions.push(scanDisposable, fixDisposable, fixFileDisposable, viewDisposable, startDisposable, stopDisposable, applyStoredFixDisposable);
+	// ============================
+	// GLOBAL FIX ALL
+	// ============================
+	const fixAllGlobalDisposable = vscode.commands.registerCommand('cerberus.fixAllGlobal', async () => {
+		const allVulns = vulnerabilityProvider.getAllVulnerabilities();
+		if (!allVulns || allVulns.length === 0) {
+			vscode.window.showInformationMessage('No vulnerabilities found to fix.');
+			return;
+		}
+
+		// Get unique file names that have vulnerabilities
+		const fileNames = [...new Set(allVulns.map(v => {
+			return v.file.split('\\').pop()?.split('/').pop() || v.file;
+		}))];
+
+		if (fileNames.length === 0) {
+			return;
+		}
+
+		vscode.window.showInformationMessage(`Cerberus: Starting global fix across ${fileNames.length} file(s)...`);
+
+		// Iterate through each file and trigger the fixFile logic
+		for (const fileName of fileNames) {
+			// Create a mock tree item with the file name as the label
+			const mockItem = new VulnerabilityItem(fileName, vscode.TreeItemCollapsibleState.None, undefined, undefined, 'file');
+			await vscode.commands.executeCommand('cerberus.fixFile', mockItem);
+		}
+	});
+
+	context.subscriptions.push(scanDisposable, fixDisposable, fixFileDisposable, viewDisposable, startDisposable, stopDisposable, applyStoredFixDisposable, fixAllGlobalDisposable);
 
 }
 

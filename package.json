@@ -34,6 +34,12 @@
         "icon": "$(search)"
       },
       {
+        "command": "cerberus.fixAllGlobal",
+        "title": "Apply All Global Fixes",
+        "category": "Cerberus",
+        "icon": "$(sparkle)"
+      },
+      {
         "command": "cerberus.fixVulnerability",
         "title": "Apply Fix",
         "category": "Cerberus",
@@ -73,6 +79,11 @@
       "view/title": [
         {
           "command": "cerberus.scan",
+          "when": "view == cerberus.vulnerabilityView",
+          "group": "navigation"
+        },
+        {
+          "command": "cerberus.fixAllGlobal",
           "when": "view == cerberus.vulnerabilityView",
           "group": "navigation"
         }
