@@ -29,6 +29,7 @@ let realTimeEnabled = true;
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
 	console.log('Cerberus security extension is now active!');
+	vscode.commands.executeCommand('setContext', 'cerberus.realTimeEnabled', realTimeEnabled);
 
 	// --- Status Bar ---
 	statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -72,14 +73,13 @@ export function activate(context: vscode.ExtensionContext) {
 			clearTimeout(debounceTimers.get(fileKey)!);
 		}
 
-		// Set new debounce to trigger scan instead of auto-patching
+		// Set new debounce to trigger snippet-based analysis
 		debounceTimers.set(fileKey, setTimeout(() => {
 			debounceTimers.delete(fileKey);
 			
-			// If it's the active document, trigger the scan command
 			const activeEditor = vscode.window.activeTextEditor;
 			if (activeEditor && activeEditor.document.uri.toString() === doc.uri.toString()) {
-				vscode.commands.executeCommand('cerberus.scan');
+				handleRealTimeTyping(doc, event.contentChanges);
 			}
 		}, DEBOUNCE_MS));
 	});
@@ -200,7 +200,7 @@ export function activate(context: vscode.ExtensionContext) {
 			await applyIndividualFix(vulnerability);
 		} else if (vulnerability.result) {
 			// Fall back to full file replacement
-			await applyFix(vulnerability.file, vulnerability.result);
+			await applyFix(vulnerability.file, vulnerability.result, vulnerability);
 		} else {
 			vscode.window.showErrorMessage('No fix available for this vulnerability.');
 		}
@@ -245,7 +245,7 @@ export function activate(context: vscode.ExtensionContext) {
 			} catch (error: any) {
 				const fixableByResult = fileVulns.find(v => v.status === 'analyzed' && v.result);
 				if (fixableByResult) {
-					await applyFix(fixableByResult.file, fixableByResult.result!);
+					await applyFix(fixableByResult.file, fixableByResult.result!, fixableByResult);
 				} else {
 					vscode.window.showErrorMessage('No fixes available for this file.');
 				}
@@ -262,12 +262,14 @@ export function activate(context: vscode.ExtensionContext) {
 	// ============================
 	const startDisposable = vscode.commands.registerCommand('cerberus.startRealTime', () => {
 		realTimeEnabled = true;
+		vscode.commands.executeCommand('setContext', 'cerberus.realTimeEnabled', true);
 		setStatus('idle');
 		vscode.window.showInformationMessage('🟢 Cerberus: Real-time scanning started.');
 	});
 
 	const stopDisposable = vscode.commands.registerCommand('cerberus.stopRealTime', () => {
 		realTimeEnabled = false;
+		vscode.commands.executeCommand('setContext', 'cerberus.realTimeEnabled', false);
 		// Clear any pending debounce timers
 		for (const timer of debounceTimers.values()) {
 			clearTimeout(timer);
@@ -364,9 +366,71 @@ export function activate(context: vscode.ExtensionContext) {
 
 
 // ============================
+// REAL-TIME TYPING ANALYSIS
+// ============================
+async function handleRealTimeTyping(doc: vscode.TextDocument, contentChanges: readonly vscode.TextDocumentContentChangeEvent[]) {
+	let minLine = Infinity;
+	let maxLine = -Infinity;
+	for (const change of contentChanges) {
+		minLine = Math.min(minLine, change.range.start.line);
+		const newLineCount = change.text.split('\n').length - 1;
+		maxLine = Math.max(maxLine, change.range.start.line + newLineCount, change.range.end.line);
+	}
+
+	const contextLines = 5;
+	const startLine = Math.max(0, minLine - contextLines);
+	const endLine = Math.min(doc.lineCount - 1, maxLine + contextLines);
+	const snippetRange = new vscode.Range(startLine, 0, endLine, doc.lineAt(endLine).text.length);
+	const snippet = doc.getText(snippetRange);
+
+	const nonEmptyLines = snippet.split('\n').filter(l => l.trim().length > 0).length;
+	if (nonEmptyLines < 3) return;
+
+	try {
+		setStatus('scanning', path.basename(doc.uri.fsPath));
+		const response = await axios.post(`${BACKEND_URL}/api/patch-snippet`, {
+			snippet, filePath: doc.uri.fsPath, startLine, endLine, fullFileContext: doc.getText()
+		}, { timeout: 130000 });
+		
+		setStatus('idle');
+		const data = response.data;
+
+		if (data.has_changes && data.patched_snippet && data.patched_snippet !== snippet) {
+			const newVuln: Vulnerability = {
+				file: doc.uri.fsPath,
+				status: 'analyzed',
+				type: 'Real-time issue detected',
+				severity: 'medium',
+				line: startLine + 1,
+				endLine: endLine + 1,
+				originalCode: snippet,
+				fixedCode: data.patched_snippet,
+				description: 'Issue detected during active typing. Click to apply fix.'
+			};
+
+			let existing = vulnerabilityProvider.getAllVulnerabilities();
+			// Clear old overlapping non-fixed issues to avoid messy duplicates
+			existing = existing.filter(v => {
+				if (v.file !== doc.uri.fsPath) return true;
+				if (v.status === 'fixed') return true;
+				const vStart = v.line || 1;
+				const vEnd = v.endLine || vStart;
+				const isOverlapping = (vStart <= endLine + 1) && (vEnd >= startLine + 1);
+				return !isOverlapping;
+			});
+
+			existing.push(newVuln);
+			vulnerabilityProvider.setVulnerabilities(existing);
+		}
+	} catch (error) {
+		setStatus('idle');
+	}
+}
+
+// ============================
 // APPLY FIX (full file replace)
 // ============================
-async function applyFix(filePath: string, correctedCode: string) {
+async function applyFix(filePath: string, correctedCode: string, vulnerability?: Vulnerability) {
 	try {
 		if (!fs.existsSync(filePath)) {
 			vscode.window.showErrorMessage(`File not found: ${filePath}`);
@@ -387,6 +451,10 @@ async function applyFix(filePath: string, correctedCode: string) {
 
 		if (success) {
 			await document.save();
+			if (vulnerability) {
+				vulnerability.status = 'fixed';
+				vulnerabilityProvider.refresh();
+			}
 			vscode.window.showInformationMessage(`✅ Fix applied and saved: ${path.basename(filePath)}`);
 		} else {
 			vscode.window.showErrorMessage('Failed to apply fix.');
@@ -571,6 +639,8 @@ async function applyIndividualFix(vulnerability: Vulnerability, silent: boolean 
 
 			if (success) {
 				await document.save();
+				vulnerability.status = 'fixed';
+				vulnerabilityProvider.refresh();
 				if (!silent) {
 					const vulnType = vulnerability.type || 'vulnerability';
 					vscode.window.showInformationMessage(

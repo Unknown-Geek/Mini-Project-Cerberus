@@ -86,6 +86,16 @@
           "command": "cerberus.fixAllGlobal",
           "when": "view == cerberus.vulnerabilityView",
           "group": "navigation"
+        },
+        {
+          "command": "cerberus.startRealTime",
+          "when": "view == cerberus.vulnerabilityView && !cerberus.realTimeEnabled",
+          "group": "navigation"
+        },
+        {
+          "command": "cerberus.stopRealTime",
+          "when": "view == cerberus.vulnerabilityView && cerberus.realTimeEnabled",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
