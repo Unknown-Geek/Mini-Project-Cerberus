@@ -27,10 +27,15 @@ let isPatchingInProgress = false;
 // Toggle for real-time scanning
 let realTimeEnabled = true;
 
+// Toggle for auto-patching
+let autoPatchEnabled = false;
+const autoPatchRemainingLoops = new Map<string, number>();
+
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
 	console.log('Cerberus security extension is now active!');
 	vscode.commands.executeCommand('setContext', 'cerberus.realTimeEnabled', realTimeEnabled);
+	vscode.commands.executeCommand('setContext', 'cerberus.autoPatchEnabled', autoPatchEnabled);
 
 	// --- Status Bar ---
 	statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -123,21 +128,34 @@ export function activate(context: vscode.ExtensionContext) {
 	// ============================
 	// MANUAL SCAN COMMAND
 	// ============================
-	const scanDisposable = vscode.commands.registerCommand('cerberus.scan', async () => {
+	const scanDisposable = vscode.commands.registerCommand('cerberus.scan', async (filePathArg?: string) => {
 		const activeEditor = vscode.window.activeTextEditor;
-		if (!activeEditor) {
+		const filePath = typeof filePathArg === 'string' ? filePathArg : activeEditor?.document.uri.fsPath;
+		
+		if (!filePath) {
 			vscode.window.showErrorMessage('Please open a file to scan.');
 			return;
 		}
 
-		const filePath = activeEditor.document.uri.fsPath;
 		const fileName = path.basename(filePath);
+		
+		// Determine the active code to send
+		let code = '';
+		if (activeEditor && activeEditor.document.uri.fsPath === filePath) {
+			code = activeEditor.document.getText();
+		} else {
+			try {
+				const doc = await vscode.workspace.openTextDocument(filePath);
+				code = doc.getText();
+			} catch (err) {
+				vscode.window.showErrorMessage(`Cerberus: Failed to read file ${fileName}`);
+				return;
+			}
+		}
 
 		setStatus('scanning', fileName);
 
 		try {
-			const code = activeEditor.document.getText();
-
 			const response = await axios.post(`${BACKEND_URL}/api/scan-file`, {
 				path: filePath,
 				code: code
@@ -178,6 +196,35 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 
 			setStatus('idle');
+
+			// Check auto-patch 
+			if (autoPatchEnabled) {
+				const fixableVulns = analyzedVulns.filter((v: Vulnerability) => v.fixedCode && v.line);
+				if (fixableVulns.length > 0) {
+					let loopsLeft = autoPatchRemainingLoops.get(filePath) ?? 3;
+					
+					if (loopsLeft > 0) {
+						autoPatchRemainingLoops.set(filePath, loopsLeft - 1);
+						vscode.window.showInformationMessage(`🪄 Cerberus Auto-Patch: Applying ${fixableVulns.length} fixes... (Loop ${4 - loopsLeft}/3)`);
+						
+						const mockItem = new VulnerabilityItem(fileName, vscode.TreeItemCollapsibleState.None, undefined, undefined, 'file');
+						await vscode.commands.executeCommand('cerberus.fixFile', mockItem, true);
+						
+						setTimeout(() => {
+							vscode.commands.executeCommand('cerberus.scan', filePath);
+						}, 1000);
+					} else {
+						vscode.window.showWarningMessage(` Cerberus Auto-Patch: Reached maximum recursion limit (3) for ${fileName}. Stopping.`);
+						autoPatchRemainingLoops.delete(filePath);
+					}
+				} else {
+					if (autoPatchRemainingLoops.has(filePath)) {
+						vscode.window.showInformationMessage(`🪄 Cerberus Auto-Patch: Complete! No vulnerabilities left in ${fileName}.`);
+						autoPatchRemainingLoops.delete(filePath);
+					}
+				}
+			}
+
 		} catch (error: any) {
 			setStatus('error');
 			let errorMessage = `❌ Cerberus: Failed to connect to backend server at ${BACKEND_URL}.`;
@@ -221,14 +268,14 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	const fixFileDisposable = vscode.commands.registerCommand('cerberus.fixFile', async (item?: VulnerabilityItem) => {
+	const fixFileDisposable = vscode.commands.registerCommand('cerberus.fixFile', async (item?: VulnerabilityItem, isAutoPatch: boolean = false) => {
 		if (!item) {
 			vscode.window.showWarningMessage('Please select a file from the Cerberus panel.');
 			return;
 		}
 		const fileVulns = vulnerabilityProvider.getVulnerabilitiesForFile(item.label);
 		if (fileVulns.length === 0) {
-			vscode.window.showWarningMessage('No vulnerabilities found for this file.');
+			if (!isAutoPatch) vscode.window.showWarningMessage('No vulnerabilities found for this file.');
 			return;
 		}
 
@@ -245,9 +292,11 @@ export function activate(context: vscode.ExtensionContext) {
 				const success = await applyIndividualFix(vuln, true);
 				if (success) { fixedCount++; }
 			}
-			vscode.window.showInformationMessage(
-				`✅ Cerberus: Applied ${fixedCount}/${fixableVulns.length} fixes in ${path.basename(filePath)}`
-			);
+			if (!isAutoPatch) {
+				vscode.window.showInformationMessage(
+					`✅ Cerberus: Applied ${fixedCount}/${fixableVulns.length} fixes in ${path.basename(filePath)}`
+				);
+			}
 		} else {
 			// Fallback: try stored full-file fix
 			try {
@@ -262,7 +311,7 @@ export function activate(context: vscode.ExtensionContext) {
 				if (fixableByResult) {
 					await applyFix(fixableByResult.file, fixableByResult.result!, fixableByResult);
 				} else {
-					vscode.window.showErrorMessage('No fixes available for this file.');
+					if (!isAutoPatch) vscode.window.showErrorMessage('No fixes available for this file.');
 				}
 			}
 		}
@@ -273,7 +322,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// ============================
-	// START / STOP REAL-TIME
+	// START / STOP REAL-TIME & AUTO-PATCH
 	// ============================
 	const startDisposable = vscode.commands.registerCommand('cerberus.startRealTime', () => {
 		realTimeEnabled = true;
@@ -292,6 +341,19 @@ export function activate(context: vscode.ExtensionContext) {
 		debounceTimers.clear();
 		statusBarItem.text = '$(shield) Cerberus: Stopped';
 		vscode.window.showInformationMessage('🔴 Cerberus: Real-time scanning stopped.');
+	});
+
+	const enableAutoPatchDisposable = vscode.commands.registerCommand('cerberus.enableAutoPatch', () => {
+		autoPatchEnabled = true;
+		vscode.commands.executeCommand('setContext', 'cerberus.autoPatchEnabled', true);
+		vscode.window.showInformationMessage('🪄 Cerberus: Auto-Patching enabled. Vulnerabilities will loop until cleared automatically.');
+	});
+
+	const disableAutoPatchDisposable = vscode.commands.registerCommand('cerberus.disableAutoPatch', () => {
+		autoPatchEnabled = false;
+		vscode.commands.executeCommand('setContext', 'cerberus.autoPatchEnabled', false);
+		autoPatchRemainingLoops.clear();
+		vscode.window.showInformationMessage('❌ Cerberus: Auto-Patching disabled.');
 	});
 
 	// ============================
@@ -374,7 +436,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	context.subscriptions.push(scanDisposable, fixDisposable, fixFileDisposable, viewDisposable, startDisposable, stopDisposable, applyStoredFixDisposable, fixAllGlobalDisposable);
+	context.subscriptions.push(scanDisposable, fixDisposable, fixFileDisposable, viewDisposable, startDisposable, stopDisposable, enableAutoPatchDisposable, disableAutoPatchDisposable, applyStoredFixDisposable, fixAllGlobalDisposable);
 
 }
 

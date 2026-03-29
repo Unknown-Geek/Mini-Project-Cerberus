@@ -73,6 +73,18 @@
         "title": "Apply Stored Fix",
         "category": "Cerberus",
         "icon": "$(save)"
+      },
+      {
+        "command": "cerberus.enableAutoPatch",
+        "title": "Enable Auto-Patching",
+        "category": "Cerberus",
+        "icon": "$(wand)"
+      },
+      {
+        "command": "cerberus.disableAutoPatch",
+        "title": "Disable Auto-Patching",
+        "category": "Cerberus",
+        "icon": "$(x)"
       }
     ],
     "menus": {
@@ -95,6 +107,16 @@
         {
           "command": "cerberus.stopRealTime",
           "when": "view == cerberus.vulnerabilityView && cerberus.realTimeEnabled",
+          "group": "navigation"
+        },
+        {
+          "command": "cerberus.enableAutoPatch",
+          "when": "view == cerberus.vulnerabilityView && !cerberus.autoPatchEnabled",
+          "group": "navigation"
+        },
+        {
+          "command": "cerberus.disableAutoPatch",
+          "when": "view == cerberus.vulnerabilityView && cerberus.autoPatchEnabled",
           "group": "navigation"
         }
       ],
