@@ -18,6 +18,7 @@ let statusBarItem: vscode.StatusBarItem;
 
 // Debounce timers per file URI
 const debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+const pendingChanges = new Map<string, { minLine: number, maxLine: number }>();
 const DEBOUNCE_MS = 2000;
 
 // Guard: prevent re-entrant patching while we're applying a fix
@@ -68,6 +69,15 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const fileKey = doc.uri.toString();
 
+		// Accumulate changed lines over the debounce window
+		let bounds = pendingChanges.get(fileKey) || { minLine: Infinity, maxLine: -Infinity };
+		for (const change of event.contentChanges) {
+			bounds.minLine = Math.min(bounds.minLine, change.range.start.line);
+			const newLineCount = change.text.split('\n').length - 1;
+			bounds.maxLine = Math.max(bounds.maxLine, change.range.start.line + newLineCount, change.range.end.line);
+		}
+		pendingChanges.set(fileKey, bounds);
+
 		// Clear previous debounce
 		if (debounceTimers.has(fileKey)) {
 			clearTimeout(debounceTimers.get(fileKey)!);
@@ -77,9 +87,14 @@ export function activate(context: vscode.ExtensionContext) {
 		debounceTimers.set(fileKey, setTimeout(() => {
 			debounceTimers.delete(fileKey);
 			
+			const finalBounds = pendingChanges.get(fileKey);
+			pendingChanges.delete(fileKey);
+			
+			if (!finalBounds) { return; }
+			
 			const activeEditor = vscode.window.activeTextEditor;
 			if (activeEditor && activeEditor.document.uri.toString() === doc.uri.toString()) {
-				handleRealTimeTyping(doc, event.contentChanges);
+				handleRealTimeTyping(doc, finalBounds.minLine, finalBounds.maxLine);
 			}
 		}, DEBOUNCE_MS));
 	});
@@ -368,15 +383,7 @@ export function activate(context: vscode.ExtensionContext) {
 // ============================
 // REAL-TIME TYPING ANALYSIS
 // ============================
-async function handleRealTimeTyping(doc: vscode.TextDocument, contentChanges: readonly vscode.TextDocumentContentChangeEvent[]) {
-	let minLine = Infinity;
-	let maxLine = -Infinity;
-	for (const change of contentChanges) {
-		minLine = Math.min(minLine, change.range.start.line);
-		const newLineCount = change.text.split('\n').length - 1;
-		maxLine = Math.max(maxLine, change.range.start.line + newLineCount, change.range.end.line);
-	}
-
+async function handleRealTimeTyping(doc: vscode.TextDocument, minLine: number, maxLine: number) {
 	const contextLines = 5;
 	const startLine = Math.max(0, minLine - contextLines);
 	const endLine = Math.min(doc.lineCount - 1, maxLine + contextLines);
