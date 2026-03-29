@@ -4,14 +4,14 @@ import hashlib
 import pickle
 import random
 import base64
+import subprocess
 import json
 import secrets
-import subprocess
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-SECRET_API_KEY = os.getenv('SECRET_API_KEY', 'live_prod_secret_key_9921')
+SECRET_API_KEY = os.getenv('SECRET_API_KEY')
 DB_PATH = "production.db"
 
 def init_db():
@@ -55,9 +55,7 @@ def register_user():
 @app.route('/api/v1/download', methods=['GET'])
 def download_report():
     filename = request.args.get('file')
-    # Basic sanitization to prevent path traversal
-    filename = os.path.basename(filename)
-    filepath = os.path.join("/var/www/html/reports/", filename)
+    filepath = os.path.join("/var/www/html/reports/", os.path.basename(filename))
     with open(filepath, 'r') as f:
         content = f.read()
     return content
