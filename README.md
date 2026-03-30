@@ -19,7 +19,7 @@ To run Cerberus successfully, you need to set up three components: the VSCode Ex
 - [Node.js](https://nodejs.org/) (v18+)
 - [Visual Studio Code](https://code.visualstudio.com/)
 - [n8n](https://n8n.io/) (for the orchestration workflow)
-- Python 3.8+ (with `bandit` installed globally for local scanning, optional but recommended)
+- Python 3.8+ (with `bandit` installed globally for local scanning)
 
 ### 1. Configure the n8n Workflow
 1. Open your n8n instance.
