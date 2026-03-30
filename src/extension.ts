@@ -138,6 +138,11 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		const fileName = path.basename(filePath);
+
+		if (path.extname(filePath).toLowerCase() !== '.py') {
+			vscode.window.showErrorMessage(`Cerberus can only scan Python (.py) files. Cannot scan: ${fileName}`);
+			return;
+		}
 		
 		// Determine the active code to send
 		let code = '';

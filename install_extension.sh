@@ -1,0 +1,1 @@
+npx --yes @vscode/vsce package -o cerberus-latest.vsix && code --install-extension cerberus-latest.vsix
