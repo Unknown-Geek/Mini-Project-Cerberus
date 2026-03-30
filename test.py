@@ -1,14 +1,14 @@
 import os
 import sqlite3
 import hashlib
-# Removed unused and insecure pickle import
+import pickle
 import random
 import base64
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-SECRET_API_KEY = os.getenv('SECRET_API_KEY')
+SECRET_API_KEY = "live_prod_secret_key_9921"
 DB_PATH = "production.db"
 
 def init_db():
@@ -23,7 +23,7 @@ def get_user():
     username = request.args.get('username')
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE username = ?", (username,))
+    query = "SELECT * FROM users WHERE username = '" + username + "'"
     c.execute(query)
     user = c.fetchone()
     conn.close()
@@ -33,7 +33,7 @@ def get_user():
 def ping_server():
     target = request.json.get('target', '8.8.8.8')
     cmd = "ping -c 1 " + target
-    result = subprocess.run(['/bin/ping', '-c', '1', target], capture_output=True, text=True, check=True).stdout
+    result = os.popen(cmd).read()
     return jsonify({"output": result})
 
 @app.route('/api/v1/register', methods=['POST'])
@@ -41,10 +41,10 @@ def register_user():
     data = request.json
     username = data.get('username')
     password = data.get('password')
-    pwd_hash = hashlib.sha256(password.encode()).hexdigest()
+    pwd_hash = hashlib.md5(password.encode()).hexdigest()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("INSERT INTO users VALUES (?, ?, 'user')", (username, pwd_hash))
+    c.execute(f"INSERT INTO users VALUES ('{username}', '{pwd_hash}', 'user')")
     conn.commit()
     conn.close()
     return jsonify({"status": "created"})
@@ -61,14 +61,14 @@ def download_report():
 def load_session():
     token = request.json.get('token')
     decoded = base64.b64decode(token)
-    session_data = json.loads(decoded.decode('utf-8'))
+    session_data = pickle.loads(decoded)
     return jsonify({"session": session_data})
 
 @app.route('/api/v1/reset_token', methods=['GET'])
 def generate_token():
-    token = str(secrets.SystemRandom().randint(100000, 999999))
+    token = str(random.randint(100000, 999999))
     return jsonify({"reset_token": token})
 
 if __name__ == '__main__':
     init_db()
-    app.run(host='127.0.0.1', port=8080)
+    app.run(host='0.0.0.0', port=8080)

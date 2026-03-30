@@ -25,7 +25,7 @@ const DEBOUNCE_MS = 2000;
 let isPatchingInProgress = false;
 
 // Toggle for real-time scanning
-let realTimeEnabled = true;
+let realTimeEnabled = false;
 
 // Toggle for auto-patching
 let autoPatchEnabled = false;
@@ -39,7 +39,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// --- Status Bar ---
 	statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-	statusBarItem.text = '$(shield) Cerberus: Idle';
+	statusBarItem.text = realTimeEnabled ? '$(shield) Cerberus: Idle' : '$(shield) Cerberus: Stopped';
 	statusBarItem.tooltip = 'Cerberus real-time security scanner';
 	statusBarItem.show();
 	context.subscriptions.push(statusBarItem);
