@@ -11,10 +11,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        -11904,
-        5492
+        -16944,
+        6848
       ],
-      "id": "ab9d679d-0a8e-49ec-a40a-268681b34f03",
+      "id": "5a1beaef-7a16-431f-85dc-c1de88bec582",
       "name": "Auditor Fallback",
       "credentials": {
         "groqApi": {
@@ -34,10 +34,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        -12696,
-        5912
+        -17744,
+        7264
       ],
-      "id": "95d68673-5d4a-4076-937b-c18426e0c608",
+      "id": "cb0be7f8-5b63-49aa-a7d0-a9b17ea972fb",
       "name": "Syntax Fixer Fallback",
       "credentials": {
         "groqApi": {
@@ -58,10 +58,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -12824,
-        5912
+        -17872,
+        7264
       ],
-      "id": "eda458ee-4bf1-4edb-b0c2-f0c4689ed33a",
+      "id": "176f62f8-2b62-41a7-acef-70a336ace7f0",
       "name": "Syntax Fixer Main",
       "credentials": {
         "googlePalmApi": {
@@ -81,10 +81,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -12032,
-        5492
+        -17072,
+        6848
       ],
-      "id": "12703c5a-0a7f-4bc6-81be-dac376f0298f",
+      "id": "429bc04e-8c21-4706-b68a-04d414622265",
       "name": "Auditor Main",
       "credentials": {
         "googlePalmApi": {
@@ -149,10 +149,10 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        -10320,
-        5784
+        -15360,
+        7136
       ],
-      "id": "503625cb-0d46-4366-b597-e1ae5eee4aad",
+      "id": "eac1c903-8f0c-4501-86a5-df1afb6a5a32",
       "name": "Append or update row in sheet",
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -168,10 +168,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -10544,
-        5784
+        -15584,
+        7136
       ],
-      "id": "ce925a37-cc5b-4255-a2f7-f42f8cb57c64",
+      "id": "6c6d01ef-ef1f-4482-b7e7-ff407e443b28",
       "name": "JSON Output Parser - Sheet"
     },
     {
@@ -183,10 +183,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        -10768,
-        5636
+        -15808,
+        6992
       ],
-      "id": "d2f0f18c-e8fb-483f-9c60-d7e62ddc6349",
+      "id": "1758f07f-1ba1-4407-a709-83ec82ba95e4",
       "name": "Send Corrected Code"
     },
     {
@@ -196,10 +196,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -11056,
-        5636
+        -16096,
+        6992
       ],
-      "id": "0180ce1b-d5b2-4d2c-a7de-ff975c261fde",
+      "id": "32821b05-567f-48e2-b13d-02c5414eb6ee",
       "name": "Prepare final data"
     },
     {
@@ -209,23 +209,23 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -10544,
-        5592
+        -15584,
+        6944
       ],
-      "id": "c20fa160-7f1e-4142-abb1-a9bc9ff8052d",
+      "id": "bc73ca48-d04d-4d53-beef-ccc9d2a7862d",
       "name": "Increment Counter"
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// CODE IN JAVASCRIPT\n// Extracts patched Python from Patcher Agent output.\n// FIXES:\n//   1. Strip <tool_call> blobs that kimi-k2 sometimes emits\n//   2. Fix common field-name typos (vureabilities → vulnerabilities)\n//   3. Second-pass extraction if extracted code is still a JSON blob\n//   4. Fallback to last known good code from Max Retries Reached?\n//   5. Save Patcher vulnerabilities (with fixed_code) to static data\n// ============================================================\n\nfor (const item of items) {\n  try {\n    let rawOutput = item.json.output;\n\n    if (typeof rawOutput === 'string') {\n      // 1. Strip <tool_call>...</tool_call> and stray XML/HTML tags\n      rawOutput = rawOutput.replace(/<tool_call>[\\s\\S]*?<\\/tool_call>/gi, '');\n      rawOutput = rawOutput.replace(/<[a-zA-Z_][^>]*\\/?>|<\\/[a-zA-Z_][^>]*>/g, '');\n\n      // 2. Fix known field typos\n      rawOutput = rawOutput.replace(/\"vureabilities\"\\s*:/g, '\"vulnerabilities\":');\n      rawOutput = rawOutput.replace(/\"vulnerabilites\"\\s*:/g, '\"vulnerabilities\":');\n      rawOutput = rawOutput.replace(/\"vulnarabilities\"\\s*:/g, '\"vulnerabilities\":');\n\n      // 3. Strip markdown fences\n      rawOutput = rawOutput.replace(/^```json\\s*|\\s*```$/g, '').trim();\n      rawOutput = rawOutput.replace(/^```\\s*|\\s*```$/g, '').trim();\n\n      try {\n        const parsed = JSON.parse(rawOutput);\n        item.json.code = parsed.full_corrected_code || rawOutput;\n        item.json.full_corrected_code = parsed.full_corrected_code || rawOutput;\n        item.json.vulnerabilities = parsed.vulnerabilities || [];\n      } catch (e) {\n        // Not valid JSON — treat as raw Python\n        item.json.code = rawOutput;\n        item.json.full_corrected_code = rawOutput;\n        item.json.vulnerabilities = [];\n      }\n\n    } else if (typeof rawOutput === 'object' && rawOutput !== null) {\n      item.json.code = rawOutput.full_corrected_code || '';\n      item.json.full_corrected_code = rawOutput.full_corrected_code || '';\n      item.json.vulnerabilities = rawOutput.vulnerabilities || [];\n    }\n\n    // 4. Sanity check: if extracted code is still a JSON blob, re-extract\n    const extracted = (item.json.code || '').trim();\n    if (extracted.startsWith('{') || extracted.startsWith('[')) {\n      try {\n        const reparsed = JSON.parse(extracted);\n        if (reparsed.full_corrected_code) {\n          item.json.code = reparsed.full_corrected_code;\n          item.json.full_corrected_code = reparsed.full_corrected_code;\n        } else {\n          throw new Error('no full_corrected_code in re-parsed blob');\n        }\n      } catch (e) {\n        const fallback = $('Max Retries Reached?').first()?.json?.code || '';\n        item.json.code = fallback;\n        item.json.full_corrected_code = fallback;\n        item.json.parse_error = 'Patcher output unrecognised; used last known good code';\n      }\n    }\n\n    // 5. Save Patcher vulnerabilities (with fixed_code) to workflow static data\n    //    so they survive the Auditor Agent re-scan which strips all item fields.\n    const patcherVulns = item.json.vulnerabilities || [];\n    if (patcherVulns.length > 0) {\n      const staticData = $getWorkflowStaticData('global');\n      const execId = ($execution && $execution.id) ? String($execution.id) : 'run_' + Date.now();\n      if (!staticData.runs) staticData.runs = {};\n      if (!staticData.runs[execId]) staticData.runs[execId] = {};\n      staticData.runs[execId].patcher_vulnerabilities = JSON.parse(JSON.stringify(patcherVulns));\n    }\n\n  } catch (error) {\n    item.json.error = error.message;\n  }\n}\n\nreturn items;"
+        "jsCode": "// ============================================================\n// CODE IN JAVASCRIPT\n// Extracts patched Python from Patcher Agent output.\n// FIXES:\n//   1. Strip <tool_call> blobs that kimi-k2 sometimes emits\n//   2. Fix common field-name typos (vureabilities → vulnerabilities)\n//   3. Second-pass extraction if extracted code is still a JSON blob\n//   4. Fallback to last known good code from Max Retries Reached?\n//   5. Save Patcher vulnerabilities (with fixed_code) to static data\n// ============================================================\n\nfor (const item of items) {\n  try {\n    let rawOutput = item.json.output;\n\n    if (typeof rawOutput === 'string') {\n      // 1. Strip <tool_call>...</tool_call> and stray XML/HTML tags\n      rawOutput = rawOutput.replace(/<tool_call>[\\s\\S]*?<\\/tool_call>/gi, '');\n      rawOutput = rawOutput.replace(/<[a-zA-Z_][^>]*\\/?>|<\\/[a-zA-Z_][^>]*>/g, '');\n\n      // 2. Fix known field typos\n      rawOutput = rawOutput.replace(/\"vureabilities\"\\s*:/g, '\"vulnerabilities\":');\n      rawOutput = rawOutput.replace(/\"vulnerabilites\"\\s*:/g, '\"vulnerabilities\":');\n      rawOutput = rawOutput.replace(/\"vulnarabilities\"\\s*:/g, '\"vulnerabilities\":');\n\n      // 3. Strip markdown fences\n      rawOutput = rawOutput.replace(/^```json\\s*|\\s*```$/g, '').trim();\n      rawOutput = rawOutput.replace(/^```\\s*|\\s*```$/g, '').trim();\n\n      try {\n        const parsed = JSON.parse(rawOutput);\n        item.json.code = parsed.full_corrected_code || rawOutput;\n        item.json.full_corrected_code = parsed.full_corrected_code || rawOutput;\n        item.json.vulnerabilities = parsed.vulnerabilities || [];\n      } catch (e) {\n        // Not valid JSON — treat as raw Python\n        item.json.code = rawOutput;\n        item.json.full_corrected_code = rawOutput;\n        item.json.vulnerabilities = [];\n      }\n\n    } else if (typeof rawOutput === 'object' && rawOutput !== null) {\n      item.json.code = rawOutput.full_corrected_code || '';\n      item.json.full_corrected_code = rawOutput.full_corrected_code || '';\n      item.json.vulnerabilities = rawOutput.vulnerabilities || [];\n    }\n\n    // 4. Sanity check: if extracted code is still a JSON blob, re-extract\n    const extracted = (item.json.code || '').trim();\n    if (extracted.startsWith('{') || extracted.startsWith('[')) {\n      try {\n        const reparsed = JSON.parse(extracted);\n        if (reparsed.full_corrected_code) {\n          item.json.code = reparparsed.full_corrected_code;\n          item.json.full_corrected_code = reparsed.full_corrected_code;\n        } else {\n          throw new Error('no full_corrected_code in re-parsed blob');\n        }\n      } catch (e) {\n        const fallback = $('Max Retries Reached?').first()?.json?.code || '';\n        item.json.code = fallback;\n        item.json.full_corrected_code = fallback;\n        item.json.parse_error = 'Patcher output unrecognised; used last known good code';\n      }\n    }\n\n    // 5. Save Patcher vulnerabilities (with fixed_code) to workflow static data\n    //    so they survive the Auditor Agent re-scan which strips all item fields.\n    const patcherVulns = item.json.vulnerabilities || [];\n    if (patcherVulns.length > 0) {\n      const staticData = $getWorkflowStaticData('global');\n      const execId = ($execution && $execution.id) ? String($execution.id) : 'run_' + Date.now();\n      if (!staticData.runs) staticData.runs = {};\n      if (!staticData.runs[execId]) staticData.runs[execId] = {};\n      staticData.runs[execId].patcher_vulnerabilities = JSON.parse(JSON.stringify(patcherVulns));\n    }\n\n  } catch (error) {\n    item.json.error = error.message;\n  }\n}\n\nreturn items;"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -10768,
-        5392
+        -15808,
+        6752
       ],
-      "id": "176ae79e-9e45-4f79-bd9a-68c8767cbc31",
+      "id": "2f063d52-a1db-4ad7-b7af-98804798f257",
       "name": "Code in JavaScript"
     },
     {
@@ -241,10 +241,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -11120,
-        5236
+        -16160,
+        6592
       ],
-      "id": "bfdd91f1-832f-4c68-8d3d-29ff2eb4cce9",
+      "id": "9813a8cc-f975-4cb6-8865-0cf67632c1d2",
       "name": "Patcher Agent",
       "retryOnFail": true,
       "maxTries": 3,
@@ -278,10 +278,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -11344,
-        5488
+        -16384,
+        6848
       ],
-      "id": "43fe840f-8381-4834-960a-235021d4e615",
+      "id": "c9a02246-9e92-4950-a54e-f070d09d3eb2",
       "name": "Vulnerabilities Found?"
     },
     {
@@ -291,10 +291,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -11568,
-        5488
+        -16608,
+        6848
       ],
-      "id": "4805c4e7-defe-4e9e-ab8d-fecc72ad3b5e",
+      "id": "317e2d94-b5bc-44bf-8a0f-39d88732c64c",
       "name": "JSON Output Parser"
     },
     {
@@ -316,10 +316,10 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
       "position": [
-        -11776,
-        5492
+        -16816,
+        6848
       ],
-      "id": "54317d5b-abd2-4593-b462-c58a7bd9dbf5",
+      "id": "fe1439d9-ca65-4e7a-8586-58554764e0d2",
       "name": "scan_code_with_bandit"
     },
     {
@@ -335,10 +335,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -11976,
-        5268
+        -17024,
+        6624
       ],
-      "id": "21b9e64a-0130-467b-ae26-fe72d7a3a9c8",
+      "id": "1f924006-aac8-4518-b282-409374fd5bef",
       "name": "Auditor Agent",
       "retryOnFail": true,
       "waitBetweenTries": 3000,
@@ -372,10 +372,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -12256,
-        5688
+        -17296,
+        7040
       ],
-      "id": "fecd247c-4818-42cc-9d55-92370ceebe0f",
+      "id": "ae42a68c-d079-4beb-b7cb-0105b2cccbae",
       "name": "Max Retries Reached?"
     },
     {
@@ -407,10 +407,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -12480,
-        5688
+        -17520,
+        7040
       ],
-      "id": "b4a6b7ae-1aa5-436f-acef-b794a2f9ba2a",
+      "id": "6d25eff4-9958-4580-a355-d093efa28112",
       "name": "Init Loop Counter"
     },
     {
@@ -425,10 +425,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -12832,
-        5688
+        -17872,
+        7040
       ],
-      "id": "55caf2dc-837d-483e-8733-ce615934fa8b",
+      "id": "b6d9344f-5bcc-4695-9a14-b4cbd19b8358",
       "name": "Syntax Fixer Agent",
       "retryOnFail": true
     },
@@ -442,10 +442,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -13056,
-        5688
+        -18096,
+        7040
       ],
-      "id": "e7286c4f-7d50-4f07-a73f-389dd50bad1f",
+      "id": "3fca796c-0b3c-4c4d-8c27-afd735991647",
       "name": "Webhook",
       "webhookId": "f77c6931-c83e-47e6-8da4-48d8acb8b849"
     },
@@ -461,10 +461,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -11112,
-        5460
+        -16160,
+        6816
       ],
-      "id": "83a0c524-428c-4d3b-9286-fd11ce6b1f82",
+      "id": "1455a9ef-222b-4378-9149-5d7d4b024186",
       "name": "Patcher Main",
       "credentials": {
         "googlePalmApi": {
@@ -484,10 +484,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        -10984,
-        5460
+        -16032,
+        6816
       ],
-      "id": "f6fd2b0a-8180-4665-a035-2e40ef03e9b9",
+      "id": "95d2bd35-4a95-4f33-a6d5-8d9f1d38db62",
       "name": "Patcher Fallback",
       "credentials": {
         "groqApi": {
@@ -505,10 +505,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        -10768,
-        5120
+        -15808,
+        6480
       ],
-      "id": "ce09cfbd-08d8-428c-8f50-0c843834a6b5",
+      "id": "1c8b20e5-ae79-4a4c-aaf5-b9b42543e5c2",
       "name": "Send Error - Agents"
     },
     {
@@ -518,10 +518,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -11912,
-        5784
+        -16960,
+        7136
       ],
-      "id": "2732831e-0d6a-4186-9b31-6906ccc9677c",
+      "id": "ee94c882-fcbf-48c1-a0a9-1e366e857266",
       "name": "Prepare final Data"
     },
     {
@@ -533,10 +533,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        -11568,
-        5784
+        -16608,
+        7136
       ],
-      "id": "1f2539a4-28b6-41c9-8200-bb8227d7378b",
+      "id": "6176770e-2b4e-4df5-9819-da2e6cd5f00c",
       "name": "Send Last Correct Iteration"
     }
   ],

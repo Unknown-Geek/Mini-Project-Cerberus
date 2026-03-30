@@ -1,11 +1,9 @@
 import os
 import sqlite3
 import hashlib
-import json
+# Removed unused and insecure pickle import
 import random
 import base64
-import secrets
-import subprocess
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -25,8 +23,8 @@ def get_user():
     username = request.args.get('username')
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    query = "SELECT * FROM users WHERE username = ?"
-    c.execute(query, (username,))
+    c.execute("SELECT * FROM users WHERE username = ?", (username,))
+    c.execute(query)
     user = c.fetchone()
     conn.close()
     return jsonify({"user": user})
@@ -68,7 +66,7 @@ def load_session():
 
 @app.route('/api/v1/reset_token', methods=['GET'])
 def generate_token():
-    token = secrets.token_hex(16)
+    token = str(secrets.SystemRandom().randint(100000, 999999))
     return jsonify({"reset_token": token})
 
 if __name__ == '__main__':
