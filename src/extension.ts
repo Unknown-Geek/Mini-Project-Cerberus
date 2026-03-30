@@ -566,6 +566,15 @@ async function applyIndividualFix(vulnerability: Vulnerability, silent: boolean 
 		let startLine = (vulnerability.line || 1) - 1; // Convert to 0-indexed
 		let endLine = (vulnerability.endLine || vulnerability.line || 1) - 1;
 
+		// Clamp to EOF to prevent instant out-of-bounds rejection, allowing fallback search to compensate
+		if (startLine >= document.lineCount) {
+			startLine = Math.max(0, document.lineCount - 1);
+		}
+		if (endLine >= document.lineCount) {
+			endLine = Math.max(0, document.lineCount - 1);
+		}
+
+
 		// Additional validation: if we have originalCode, try to find the exact location
 		if (vulnerability.originalCode && startLine >= 0 && startLine < document.lineCount) {
 			const expectedLines = vulnerability.originalCode.split('\n').map(l => l.trim());
@@ -594,7 +603,7 @@ async function applyIndividualFix(vulnerability: Vulnerability, silent: boolean 
 				let found = false;
 				
 				// Search in a window around the expected line
-				const searchRadius = 10;
+				const searchRadius = 20;
 				const searchStart = Math.max(0, startLine - searchRadius);
 				const searchEnd = Math.min(document.lineCount - expectedLines.length, startLine + searchRadius);
 				
